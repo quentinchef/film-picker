@@ -3,36 +3,38 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Films vus · import Letterboxd</title>
+<title>Films vus · Letterboxd Picker</title>
 <style>
-:root{--bg:#14181c;--bar:#1c2228;--panel:#1a2026;--tx:#e4e8eb;--mu:#8a96a0;--ok:#40bcf4;--ac:#ff8000;--bd:#2c3640}
+:root{--bg:#14181c;--bar:#1c2228;--panel:#1a2026;--tx:#e4e8eb;--mu:#8a96a0;--ok:#40bcf4;--ac:#ff8000;--bd:#2c3640;--bad:#ff4d4d}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 system-ui,sans-serif}
-header{position:sticky;top:0;z-index:20;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--bar);border-bottom:1px solid var(--bd)}
-header b{font-size:15px;white-space:nowrap}
-#hint{flex:1;min-width:180px;padding:7px 10px;border-radius:4px;border:1px solid #3a4651;background:var(--bg);color:var(--tx)}
-button{padding:7px 12px;border:0;border-radius:4px;background:#2c3640;color:var(--tx);font:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 system-ui,-apple-system,sans-serif}
+header{position:sticky;top:0;z-index:30;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 14px;background:var(--bar);border-bottom:1px solid var(--bd)}
+header b{font-size:14px;white-space:nowrap}
+#hint{flex:1;min-width:160px;padding:7px 10px;border-radius:4px;border:1px solid #3a4651;background:var(--bg);color:var(--tx)}
+button{padding:7px 11px;border:0;border-radius:4px;background:#2c3640;color:var(--tx);font:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-size:13px}
 button:hover{background:#3a4651}
 #next{background:var(--ac);color:#111;font-weight:600}
 #next:disabled{opacity:.5;cursor:wait}
-#toggle-sidebar{background:#23323f}
+.nav-tab{background:transparent;border:1px solid var(--bd)}
+.nav-tab.active{background:#23323f;border-color:var(--ok);color:var(--ok);font-weight:600}
 
-.layout{display:flex;min-height:calc(100vh - 53px)}
+.layout{display:flex;min-height:calc(100vh - 49px)}
 aside{width:290px;min-width:260px;background:var(--panel);border-right:1px solid var(--bd);padding:14px;display:flex;flex-direction:column;gap:12px}
-aside h3{margin:0;font-size:14px;text-transform:uppercase;letter-spacing:.5px;color:var(--mu);display:flex;justify-content:space-between;align-items:center}
+aside h3{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--mu);display:flex;justify-content:space-between;align-items:center}
 .pill-list{display:flex;flex-direction:column;gap:8px;overflow-y:auto;max-height:calc(100vh - 160px)}
-.sug-card{background:#232b33;border:1px solid #2f3a46;border-radius:6px;padding:9px 11px;cursor:pointer;transition:border-color .15s,background .15s;text-align:left}
+.sug-card{background:#232b33;border:1px solid #2f3a46;border-radius:6px;padding:8px 10px;cursor:pointer;transition:border-color .15s,background .15s;text-align:left}
 .sug-card:hover{background:#2a343e;border-color:var(--ok)}
-.sug-card b{display:block;color:var(--tx);font-size:13px;margin-bottom:3px}
+.sug-card b{display:block;color:var(--tx);font-size:13px;margin-bottom:2px}
 .sug-card span{display:block;font-size:11px;color:var(--mu)}
 .sug-card.active{border-color:var(--ac);background:#2c2820}
 
 .content{flex:1;display:flex;flex-direction:column}
-#perf{padding:6px 16px;color:var(--mu);font-size:12px;background:#111417;border-bottom:1px solid #1e242a}
-#msg{padding:20px;text-align:center;color:var(--mu)}
-main{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;padding:16px;flex:1}
+#perf{padding:6px 16px;color:var(--mu);font-size:12px;background:#111417;border-bottom:1px solid #1e242a;min-height:28px}
+#msg{padding:14px;text-align:center;color:var(--mu);font-size:13px}
+main{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;padding:14px;flex:1;align-content:start}
+
 .c{position:relative;aspect-ratio:2/3;border-radius:4px;overflow:hidden;background:#222b33;cursor:pointer;outline:2px solid transparent;outline-offset:-2px}
-.c img{width:100%;height:100%;object-fit:cover;display:block;transition:opacity .15s}
+.c img{width:100%;height:100%;object-fit:cover;display:block}
 .c.sel{outline-color:var(--ok)}
 .c.sel img{opacity:.45}
 .c.sel::after{content:"✓ vu";position:absolute;top:6px;right:6px;background:var(--ok);color:#111;font-weight:700;font-size:11px;padding:2px 6px;border-radius:3px}
@@ -43,16 +45,29 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:
 .c.w .wl{background:var(--ac);color:#111;font-weight:700}
 .c.sel .wl{display:none}
 
-/* Modal Clés */
+/* Gestionnaire de liste (Vus / Watchlist) */
+#list-view{display:none;padding:16px;flex:1;flex-direction:column;gap:12px}
+.list-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--panel);padding:10px 14px;border-radius:6px;border:1px solid var(--bd)}
+.list-toolbar input, .list-toolbar select{padding:6px 10px;border-radius:4px;border:1px solid #3a4651;background:var(--bg);color:var(--tx);font:inherit}
+.list-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
+.list-item{position:relative;background:#222b33;border-radius:4px;overflow:hidden;border:1px solid var(--bd);display:flex;flex-direction:column}
+.list-item img{width:100%;aspect-ratio:2/3;object-fit:cover}
+.list-item-body{padding:6px;display:flex;flex-direction:column;gap:4px;flex:1;justify-content:space-between}
+.list-item-title{font-size:11px;font-weight:600;line-height:1.2}
+.list-item-sub{font-size:10px;color:var(--mu)}
+.list-item-actions{display:flex;gap:4px;margin-top:4px}
+.list-item-actions button{flex:1;padding:4px;font-size:10px;justify-content:center}
+
+/* Modale configuration */
 .modal-backdrop{position:fixed;top:0;left:0;width:100%;height:100%;background:#0009;display:none;align-items:center;justify-content:center;z-index:100}
-.modal{background:var(--panel);border:1px solid var(--bd);padding:20px;border-radius:6px;max-width:400px;width:90%}
+.modal{background:var(--panel);border:1px solid var(--bd);padding:20px;border-radius:6px;max-width:440px;width:92%;max-height:90vh;overflow-y:auto}
 .modal h3{margin-top:0}
 .modal label{display:block;margin:10px 0 4px;font-size:12px;color:var(--mu)}
 .modal input{width:100%;padding:8px;border-radius:4px;border:1px solid #3a4651;background:var(--bg);color:var(--tx)}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
 
 @media(max-width:850px){
-  aside{position:fixed;bottom:0;top:53px;left:0;z-index:30;box-shadow:4px 0 15px #000a;transform:translateX(-100%);transition:transform .2s}
+  aside{position:fixed;bottom:0;top:49px;left:0;z-index:40;box-shadow:4px 0 15px #000a;transform:translateX(-100%);transition:transform .2s}
   aside.open{transform:translateX(0)}
 }
 </style>
@@ -61,17 +76,17 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:
 
 <header>
   <button id="toggle-sidebar">🎯 Suggestions</button>
-  <b><span id="n">0</span> vus · <span id="w">0</span> à voir</b>
+  <button id="tab-explore" class="nav-tab active">Explorer</button>
+  <button id="tab-seen" class="nav-tab"><span id="n">0</span> vus</button>
+  <button id="tab-watch" class="nav-tab"><span id="w">0</span> à voir</button>
   <button id="next">Grille suivante</button>
-  <input id="hint" placeholder="Tapez un réalisateur, acteur ou mot-clé (« Spielberg », « Kubrick »…)">
+  <input id="hint" placeholder="Réalisateur, acteur ou mot-clé…">
   <button id="ask" style="background:#2c5f7a">Chercher</button>
   <button id="all">Tout cocher</button>
-  <button id="csv">Export vus</button>
-  <button id="wcsv">Watchlist</button>
-  <button id="sav">Sauvegarder</button>
-  <button id="load">Charger</button>
-  <input type="file" id="file" accept=".json,.csv" style="display:none">
-  <button id="cfg">Clés</button>
+  <button id="sync-push" title="Enregistrer sur GitHub Gist">☁️ Sauver en ligne</button>
+  <button id="sync-pull" title="Récupérer depuis GitHub Gist">☁️ Charger</button>
+  <button id="csv">Export CSV</button>
+  <button id="cfg">⚙️ Clés</button>
   <button id="rst">Reset</button>
 </header>
 
@@ -82,7 +97,7 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:
       <button id="gen-facets" style="padding:2px 6px;font-size:11px">↻ Relancer</button>
     </h3>
     <div style="font-size:11px;color:var(--mu)">
-      Filtres d'exploration TMDB 100% exhaustifs.
+      Filtres d'exploration TMDB exhaustifs (aucune limite).
     </div>
     <div class="pill-list" id="suggestions-container">
       <div style="color:var(--mu);font-size:12px">Chargement...</div>
@@ -92,19 +107,56 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:
   <div class="content">
     <div id="perf"></div>
     <div id="msg"></div>
+    
+    <!-- Grille de vote / exploration -->
     <main id="grid"></main>
+
+    <!-- Vue liste (Vus / Watchlist) -->
+    <div id="list-view">
+      <div class="list-toolbar">
+        <input type="text" id="list-search" placeholder="Rechercher par titre...">
+        <select id="list-decade">
+          <option value="">Toutes les époques</option>
+          <option value="2020">Années 2020</option>
+          <option value="2010">Années 2010</option>
+          <option value="2000">Années 2000</option>
+          <option value="1990">Années 1990</option>
+          <option value="1980">Années 1980</option>
+          <option value="1970">Années 1970</option>
+          <option value="old">Avant 1970</option>
+        </select>
+        <select id="list-sort">
+          <option value="date-desc">Ajoutés récemment</option>
+          <option value="date-asc">Ajoutés en premier</option>
+          <option value="year-desc">Année (récent → ancien)</option>
+          <option value="year-asc">Année (ancien → récent)</option>
+          <option value="alpha">Titre (A → Z)</option>
+        </select>
+      </div>
+      <div class="list-grid" id="list-cards"></div>
+    </div>
   </div>
 </div>
 
+<!-- Modal configuration clés -->
 <div id="modal-cfg" class="modal-backdrop">
   <div class="modal">
-    <h3>Configuration des clés API</h3>
+    <h3>Configuration des clés & Cloud</h3>
     <label for="key-gemini">Clé Gemini (aistudio.google.com/apikey)</label>
     <input type="password" id="key-gemini" placeholder="AIzaSy...">
     
     <label for="key-tmdb">Clé TMDB v3 (themoviedb.org/settings/api)</label>
     <input type="password" id="key-tmdb" placeholder="Clé API TMDB">
-    
+
+    <hr style="border:0;border-top:1px solid var(--bd);margin:16px 0">
+    <div style="font-size:12px;color:var(--mu);margin-bottom:8px">Synchronisation GitHub Gist</div>
+
+    <label for="cfg-gist-id">Gist ID</label>
+    <input type="text" id="cfg-gist-id">
+
+    <label for="cfg-gh-token">GitHub Personal Access Token (classic)</label>
+    <input type="password" id="cfg-gh-token">
+
     <div class="modal-actions">
       <button id="cfg-cancel">Annuler</button>
       <button id="cfg-save" style="background:var(--ok);color:#111;font-weight:600">Enregistrer</button>
@@ -115,7 +167,6 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:
 <script>
 const $ = s => document.querySelector(s);
 const MODELS = ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'];
-const N = 50;
 
 const TMDB_GENRES = {
   "action": 28, "aventure": 12, "animation": 16, "comédie": 35, "crime": 80,
@@ -130,9 +181,27 @@ if (!S.watch) S.watch = {};
 if (!S.seen) S.seen = {};
 if (!S.unseen) S.unseen = {};
 
-let keys = load('lb_keys', { a: '', t: '' });
+// Les clés restent vides dans le code public : l'utilisateur les renseigne via la modale "⚙️ Clés"
+let keys = load('lb_keys', {
+  a: '',
+  t: '',
+  gistId: '5e86dd50fed7f7284e320c81689dba94', // Le Gist ID n'est pas un secret, il peut rester
+  ghToken: '' // DOIT RESTER VIDE DANS LE CODE SOURCE
+});
+
 let grid = [];
-let activeMode = null; // { type: 'person'|'discover', buffer: [], total: 0, label: '' }
+let currentView = 'explore'; // 'explore', 'seen', 'watch'
+
+// Calcule le nombre de films requis pour remplir l'écran sans espace vide
+function computeScreenBatchSize() {
+  const w = window.innerWidth;
+  const h = window.innerHeight - 100;
+  const colWidth = 140; 
+  const rowHeight = 210;
+  const cols = Math.max(2, Math.floor(w / colWidth));
+  const rows = Math.max(2, Math.ceil(h / rowHeight));
+  return Math.min(120, Math.max(30, cols * rows));
+}
 
 const save = () => {
   localStorage.lb_state = JSON.stringify(S);
@@ -140,9 +209,79 @@ const save = () => {
   $('#w').textContent = Object.keys(S.watch).length;
 };
 
+// ----------------- SYNCHRONISATION GITHUB GIST -----------------
+
+async function pushToGist() {
+  if (!keys.gistId || !keys.ghToken) {
+    openKeyModal();
+    return alert('Renseigne ton Gist ID et ton Token GitHub.');
+  }
+  record();
+  $('#perf').textContent = 'Sauvegarde sur GitHub Gist en cours...';
+  try {
+    const res = await fetch(`https://api.github.com/gists/${keys.gistId}`, {
+      method: 'PATCH',
+      headers: {
+        'Accept': 'application/vnd.github+json',
+        'Authorization': `Bearer ${keys.ghToken}`
+      },
+      body: JSON.stringify({
+        files: {
+          'session-films.json': {
+            content: JSON.stringify(S)
+          }
+        }
+      })
+    });
+    if (!res.ok) throw new Error(`Erreur GitHub (${res.status})`);
+    $('#perf').textContent = `☁️ Synchronisé avec succès sur Gist (${new Date().toLocaleTimeString()})`;
+  } catch(e) {
+    alert('Erreur sauvegarde Gist : ' + e.message);
+    $('#perf').textContent = 'Échec de la sauvegarde en ligne.';
+  }
+}
+
+async function pullFromGist() {
+  if (!keys.gistId || !keys.ghToken) {
+    openKeyModal();
+    return alert('Renseigne ton Gist ID et ton Token GitHub.');
+  }
+  $('#perf').textContent = 'Récupération depuis GitHub Gist...';
+  try {
+    const res = await fetch(`https://api.github.com/gists/${keys.gistId}`, {
+      headers: {
+        'Accept': 'application/vnd.github+json',
+        'Authorization': `Bearer ${keys.ghToken}`
+      }
+    });
+    if (!res.ok) throw new Error(`Erreur GitHub (${res.status})`);
+    const data = await res.json();
+    const content = data.files['session-films.json']?.content;
+    if (content) {
+      const parsed = JSON.parse(content);
+      S = {
+        seen: parsed.seen || {},
+        unseen: parsed.unseen || {},
+        watch: parsed.watch || {}
+      };
+      save();
+      if (currentView === 'explore') renderGrid();
+      else renderListView();
+      $('#perf').textContent = `☁️ Données récupérées : ${Object.keys(S.seen).length} vus, ${Object.keys(S.watch).length} à voir.`;
+    }
+  } catch(e) {
+    alert('Erreur chargement Gist : ' + e.message);
+    $('#perf').textContent = 'Échec du chargement en ligne.';
+  }
+}
+
+// ----------------- CONFIG & MODAL -----------------
+
 function openKeyModal() {
   $('#key-gemini').value = keys.a || '';
   $('#key-tmdb').value = keys.t || '';
+  $('#cfg-gist-id').value = keys.gistId || '';
+  $('#cfg-gh-token').value = keys.ghToken || '';
   $('#modal-cfg').style.display = 'flex';
 }
 function closeKeyModal() { $('#modal-cfg').style.display = 'none'; }
@@ -151,22 +290,437 @@ $('#cfg-cancel').addEventListener('click', closeKeyModal);
 $('#cfg-save').addEventListener('click', () => {
   keys.a = $('#key-gemini').value.trim();
   keys.t = $('#key-tmdb').value.trim();
+  keys.gistId = $('#cfg-gist-id').value.trim();
+  keys.ghToken = $('#cfg-gh-token').value.trim();
   localStorage.lb_keys = JSON.stringify(keys);
   closeKeyModal();
   $('#msg').textContent = 'Clés enregistrées avec succès.';
-  if (keys.a && keys.t) {
+  if (keys.a && keys.t && !grid.length) {
     loadLLMSuggestions();
-    if (!grid.length) nextClassic();
+    nextClassic();
   }
 });
 
 function hasKeys() {
   if (!keys.a || !keys.t) {
     openKeyModal();
-    $('#msg').textContent = 'Veuillez renseigner vos clés pour continuer.';
+    $('#msg').textContent = 'Renseigne tes clés API Gemini et TMDB pour utiliser la recherche.';
     return false;
   }
   return true;
 }
 
-$('#load').addEventListener('click', () => { $('#file').value = ''; $('#file').click(); });
+// ----------------- APIS TMDB & GEMINI -----------------
+
+async function callGemini(system, prompt, temp = 0.7) {
+  const mk = m => JSON.stringify({
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { responseMimeType: 'application/json', temperature: temp,
+      ...(m.startsWith('gemini-2.5') ? { thinkingConfig: { thinkingBudget: 0 } } : {}) }
+  });
+  let j, last, used;
+  for (const m of MODELS) {
+    try {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
+        method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': keys.a }, body: mk(m)
+      });
+      j = await r.json();
+      if (!j.error) { used = m; break; }
+      last = j.error;
+    } catch (e) {}
+  }
+  if (!used) throw new Error(last?.message || 'Erreur Gemini');
+  const text = j.candidates[0].content.parts.filter(p => !p.thought).map(p => p.text).join('');
+  return JSON.parse(text.match(/\[[\s\S]*\]|\{[\s\S]*\}/)[0]);
+}
+
+async function searchPerson(name) {
+  const q = `https://api.themoviedb.org/3/search/person?api_key=${keys.t}&query=${encodeURIComponent(name)}&language=fr-FR`;
+  const j = await (await fetch(q)).json();
+  return j.results?.[0] || null;
+}
+
+// Récupération 100% exhaustive sans limitation pour une personne
+async function fetchPersonCredits(personId, role = 'director') {
+  const q = `https://api.themoviedb.org/3/person/${personId}/movie_credits?api_key=${keys.t}&language=fr-FR`;
+  const data = await (await fetch(q)).json();
+  let list = [];
+
+  if (role === 'director') {
+    const raw = (data.crew || []).filter(c => c.job === 'Director');
+    const seen = new Set();
+    for (const m of raw) {
+      if (!seen.has(m.id)) { seen.add(m.id); list.push(m); }
+    }
+  } else {
+    list = data.cast || [];
+  }
+
+  // Tri par nombre de votes décroissant
+  list.sort((a, b) => (b.vote_count || 0) - (a.vote_count || 0));
+
+  return list.map(m => ({
+    id: m.id,
+    t: m.title || m.original_title,
+    o: m.original_title,
+    y: (m.release_date || '').slice(0, 4) || '—',
+    p: m.poster_path
+  })).filter(m => m.p);
+}
+
+// Discover exhaustif pour filtres thématiques
+async function fetchDiscoverFull(params) {
+  let page = 1;
+  const out = [];
+  while (page <= 5) { // 100 films les plus célèbres du critère
+    const url = new URL('https://api.themoviedb.org/3/discover/movie');
+    url.searchParams.set('api_key', keys.t);
+    url.searchParams.set('language', 'fr-FR');
+    url.searchParams.set('sort_by', 'vote_count.desc');
+    url.searchParams.set('include_adult', 'false');
+    url.searchParams.set('page', page);
+    if (params.with_genres) url.searchParams.set('with_genres', params.with_genres);
+    if (params.with_origin_country) url.searchParams.set('with_origin_country', params.with_origin_country);
+    if (params.year_gte) url.searchParams.set('primary_release_date.gte', `${params.year_gte}-01-01`);
+    if (params.year_lte) url.searchParams.set('primary_release_date.lte', `${params.year_lte}-12-31`);
+
+    const res = await (await fetch(url.toString())).json();
+    if (!res.results || !res.results.length) break;
+    out.push(...res.results);
+    page++;
+  }
+  return out.map(m => ({
+    id: m.id,
+    t: m.title || m.original_title,
+    o: m.original_title,
+    y: (m.release_date || '').slice(0, 4) || '—',
+    p: m.poster_path
+  })).filter(m => m.p);
+}
+
+// ----------------- SUGGESTIONS CIBLÉES DU LLM -----------------
+
+const rnd = (a, k) => [...a].sort(() => Math.random() - .5).slice(0, k);
+
+async function loadLLMSuggestions() {
+  if (!hasKeys()) return;
+  const sampleSeen = rnd(Object.values(S.seen), 30).map(f => `${f.o} (${f.y})`).join(', ');
+  const prompt = `Films vus : ${sampleSeen || 'Aucun'}. Propose 8 suggestions pour enrichir la liste :
+- 3 réalisateurs majeurs
+- 2 acteurs stars
+- 3 critères thématiques (pays/décennie/genre)`;
+
+  const system = `Réponds UNIQUEMENT par JSON d'objets :
+- type : "director"|"actor"|"filter"
+- name : nom de la personne
+- label : titre court
+- desc : description
+- genres : tableau parmi [action, aventure, animation, comédie, crime, documentaire, drame, famille, fantastique, histoire, horreur, musique, mystère, romance, science-fiction, thriller, guerre, western]
+- country : code pays ISO (US, FR, KR, JP, IT, GB, etc.)
+- year_gte : année début
+- year_lte : année fin`;
+
+  try {
+    $('#suggestions-container').innerHTML = '<div style="color:var(--mu);font-size:12px">Génération des critères...</div>';
+    const list = await callGemini(system, prompt, 0.8);
+    const container = $('#suggestions-container');
+    container.innerHTML = '';
+    
+    list.forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'sug-card';
+      card.innerHTML = `<b>${item.label}</b><span>${item.desc || ''}</span>`;
+      card.onclick = () => selectFacet(item, card);
+      container.appendChild(card);
+    });
+  } catch(e) {
+    $('#suggestions-container').innerHTML = `<div style="color:var(--mu);font-size:12px">Échec (${e.message})</div>`;
+  }
+}
+
+// Charge TOUS les films d'un critère sans coupure artificielle
+async function selectFacet(facet, cardEl) {
+  document.querySelectorAll('.sug-card').forEach(c => c.classList.remove('active'));
+  if (cardEl) cardEl.classList.add('active');
+  
+  switchToExplore();
+  $('#msg').textContent = `Chargement exhaustif pour "${facet.label}"...`;
+  record();
+
+  let allFilms = [];
+  if (facet.type === 'director' || facet.type === 'actor') {
+    const person = await searchPerson(facet.name);
+    if (!person) return alert(`Introuvable : ${facet.name}`);
+    allFilms = await fetchPersonCredits(person.id, facet.type);
+  } else {
+    const params = {
+      year_gte: facet.year_gte,
+      year_lte: facet.year_lte,
+      with_origin_country: facet.country
+    };
+    if (facet.genres && facet.genres.length) {
+      const gIds = facet.genres.map(g => TMDB_GENRES[g.toLowerCase()]).filter(Boolean);
+      if (gIds.length) params.with_genres = gIds.join(',');
+    }
+    allFilms = await fetchDiscoverFull(params);
+  }
+
+  // Filtrer ceux déjà classés
+  const known = id => S.seen[id] || S.unseen[id] || S.watch[id];
+  grid = allFilms.filter(f => !known(f.id));
+
+  renderGrid();
+  $('#perf').textContent = `Critère sélectionné : ${facet.label} · ${allFilms.length} films au total (${grid.length} restants à classer)`;
+  $('#msg').textContent = grid.length ? '' : 'Tu as déjà classé l\'intégralité des films de ce critère !';
+  scrollTo(0, 0);
+}
+
+// ----------------- GRILLE CLASSIQUE ADAPTATIVE -----------------
+
+async function nextClassic() {
+  if (!hasKeys()) return;
+  switchToExplore();
+  record();
+  
+  const count = computeScreenBatchSize();
+  $('#msg').textContent = `Préparation d'une grille pleine (${count} films)...`;
+
+  try {
+    const page = Math.floor(Math.random() * 8) + 1;
+    const url = `https://api.themoviedb.org/3/discover/movie?api_key=${keys.t}&language=fr-FR&sort_by=vote_count.desc&page=${page}&vote_count.gte=300`;
+    const res = await (await fetch(url)).json();
+    const known = id => S.seen[id] || S.unseen[id] || S.watch[id];
+    
+    grid = (res.results || [])
+      .filter(m => m.poster_path && !known(m.id))
+      .slice(0, count)
+      .map(m => ({
+        id: m.id,
+        t: m.title || m.original_title,
+        o: m.original_title,
+        y: (m.release_date || '').slice(0, 4) || '—',
+        p: m.poster_path
+      }));
+
+    renderGrid();
+    $('#perf').textContent = `Grille générale classique (${grid.length} affiches)`;
+    $('#msg').textContent = grid.length ? '' : 'Plus de nouveaux films trouvés, réessaie.';
+  } catch(e) {
+    $('#msg').textContent = 'Erreur : ' + e.message;
+  }
+}
+
+// ----------------- GESTION DES LISTES (VUS / WATCHLIST) -----------------
+
+function renderListView() {
+  const isSeen = currentView === 'seen';
+  const source = isSeen ? S.seen : S.watch;
+  const listCards = $('#list-cards');
+  listCards.innerHTML = '';
+
+  const q = $('#list-search').value.toLowerCase().trim();
+  const dec = $('#list-decade').value;
+  const sort = $('#list-sort').value;
+
+  let items = Object.values(source);
+
+  // Filtre recherche
+  if (q) items = items.filter(f => (f.t && f.t.toLowerCase().includes(q)) || (f.o && f.o.toLowerCase().includes(q)));
+
+  // Filtre décennie
+  if (dec) {
+    if (dec === 'old') items = items.filter(f => +f.y < 1970);
+    else items = items.filter(f => +f.y >= +dec && +f.y < +dec + 10);
+  }
+
+  // Tris
+  items.sort((a, b) => {
+    if (sort === 'year-desc') return (+b.y || 0) - (+a.y || 0);
+    if (sort === 'year-asc') return (+a.y || 0) - (+b.y || 0);
+    if (sort === 'alpha') return (a.t || '').localeCompare(b.t || '');
+    if (sort === 'date-asc') return (a.addedAt || 0) - (b.addedAt || 0);
+    return (b.addedAt || 0) - (a.addedAt || 0); // date-desc
+  });
+
+  $('#perf').textContent = `${isSeen ? 'Films vus' : 'Watchlist'} : ${items.length} film(s) affiché(s) sur ${Object.keys(source).length}`;
+
+  items.forEach(f => {
+    const card = document.createElement('div');
+    card.className = 'list-item';
+    card.innerHTML = `
+      <img src="https://image.tmdb.org/t/p/w342${f.p}" alt="" loading="lazy">
+      <div class="list-item-body">
+        <div>
+          <div class="list-item-title">${f.t}</div>
+          <div class="list-item-sub">${f.o !== f.t ? f.o + ' · ' : ''}${f.y}</div>
+        </div>
+        <div class="list-item-actions">
+          <button class="btn-swap" title="${isSeen ? 'Basculer en watchlist' : 'Marquer comme vu'}">${isSeen ? '→ À voir' : '→ Vu'}</button>
+          <button class="btn-del" style="background:var(--bad);color:#fff" title="Supprimer de la liste">✕</button>
+        </div>
+      </div>
+    `;
+
+    // Action basculer
+    card.querySelector('.btn-swap').onclick = () => {
+      if (isSeen) {
+        delete S.seen[f.id];
+        S.watch[f.id] = { ...f, addedAt: Date.now() };
+      } else {
+        delete S.watch[f.id];
+        S.seen[f.id] = { ...f, addedAt: Date.now() };
+      }
+      save();
+      renderListView();
+    };
+
+    // Action supprimer
+    card.querySelector('.btn-del').onclick = () => {
+      delete (isSeen ? S.seen : S.watch)[f.id];
+      save();
+      renderListView();
+    };
+
+    listCards.appendChild(card);
+  });
+}
+
+function switchToExplore() {
+  currentView = 'explore';
+  $('.nav-tab.active')?.classList.remove('active');
+  $('#tab-explore').classList.add('active');
+  $('#list-view').style.display = 'none';
+  $('#grid').style.display = 'grid';
+}
+
+function switchToTab(view) {
+  record();
+  currentView = view;
+  $('.nav-tab.active')?.classList.remove('active');
+  if (view === 'seen') $('#tab-seen').classList.add('active');
+  if (view === 'watch') $('#tab-watch').classList.add('active');
+
+  $('#grid').style.display = 'none';
+  $('#list-view').style.display = 'flex';
+  renderListView();
+}
+
+$('#tab-explore').onclick = switchToExplore;
+$('#tab-seen').onclick = () => switchToTab('seen');
+$('#tab-watch').onclick = () => switchToTab('watch');
+$('#list-search').oninput = renderListView;
+$('#list-decade').onchange = renderListView;
+$('#list-sort').onchange = renderListView;
+
+// ----------------- RENDU DE LA GRILLE D'EXPLORATION -----------------
+
+function renderGrid() {
+  $('#grid').innerHTML = '';
+  grid.forEach(f => {
+    const d = document.createElement('div');
+    const paint = () => { d.className = 'c' + (f.sel ? ' sel' : '') + (f.wl ? ' w' : '') };
+    d.innerHTML = `<img src="https://image.tmdb.org/t/p/w342${f.p}" alt="" loading="lazy"><span>${f.t} (${f.y})</span><button class="wl">＋ à voir</button>`;
+    paint();
+    d.onclick = () => { f.sel = !f.sel; if (f.sel) f.wl = false; paint(); };
+    d.querySelector('.wl').onclick = e => { e.stopPropagation(); f.wl = !f.wl; if (f.wl) f.sel = false; paint(); };
+    $('#grid').append(d);
+  });
+}
+
+function record() {
+  const now = Date.now();
+  grid.forEach(f => {
+    const o = { id: f.id, t: f.t, o: f.o, y: f.y, p: f.p, addedAt: now };
+    delete S.seen[f.id]; delete S.unseen[f.id]; delete S.watch[f.id];
+    if (f.sel) S.seen[f.id] = o;
+    else if (f.wl) S.watch[f.id] = o;
+    else S.unseen[f.id] = o;
+  });
+  save();
+}
+
+// ----------------- ACTIONS GLOBAL & CSV -----------------
+
+$('#ask').addEventListener('click', async () => {
+  const query = $('#hint').value.trim();
+  if (!query || !hasKeys()) return;
+  switchToExplore();
+  record();
+  $('#msg').textContent = `Recherche TMDB pour "${query}"...`;
+
+  const person = await searchPerson(query);
+  if (person && (person.popularity > 2 || person.known_for_department)) {
+    const isDirector = person.known_for_department === 'Directing';
+    const credits = await fetchPersonCredits(person.id, isDirector ? 'director' : 'actor');
+    const known = id => S.seen[id] || S.unseen[id] || S.watch[id];
+    grid = credits.filter(f => !known(f.id));
+    renderGrid();
+    $('#perf').textContent = `${person.name} (${isDirector ? 'Réalisateur' : 'Acteur'}) : ${credits.length} films (${grid.length} à classer)`;
+    $('#msg').textContent = grid.length ? '' : 'Filmographie déjà entièrement classée.';
+    return;
+  }
+
+  // Recherche générale par mot clé
+  try {
+    const q = `https://api.themoviedb.org/3/search/movie?api_key=${keys.t}&query=${encodeURIComponent(query)}&language=fr-FR`;
+    const res = await (await fetch(q)).json();
+    const known = id => S.seen[id] || S.unseen[id] || S.watch[id];
+    grid = (res.results || [])
+      .filter(m => m.poster_path && !known(m.id))
+      .map(m => ({ id: m.id, t: m.title, o: m.original_title, y: (m.release_date || '').slice(0, 4) || '—', p: m.poster_path }));
+    renderGrid();
+    $('#perf').textContent = `Recherche libre : ${query}`;
+    $('#msg').textContent = grid.length ? '' : 'Aucun résultat disponible.';
+  } catch(e) {
+    $('#msg').textContent = 'Erreur : ' + e.message;
+  }
+});
+
+$('#hint').addEventListener('keydown', e => { if (e.key === 'Enter') $('#ask').click(); });
+$('#gen-facets').addEventListener('click', loadLLMSuggestions);
+$('#next').addEventListener('click', nextClassic);
+$('#toggle-sidebar').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+
+$('#all').addEventListener('click', () => {
+  const on = !grid.every(f => f.sel);
+  grid.forEach(f => { f.sel = on; if (on) f.wl = false; });
+  renderGrid();
+});
+
+$('#sync-push').onclick = pushToGist;
+$('#sync-pull').onclick = pullFromGist;
+
+const dl = (name, text, type) => {
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([text], { type })), download: name });
+  a.click();
+};
+
+$('#csv').addEventListener('click', () => {
+  record();
+  const rows = Object.values(S.seen).map(f => `${f.id},"${(f.o || f.t).replace(/"/g, '""')}",${f.y}`);
+  if (!rows.length) return alert('Aucun film vu à exporter.');
+  dl('letterboxd-vus.csv', 'tmdbID,Title,Year\n' + rows.join('\n'), 'text/csv');
+});
+
+$('#rst').addEventListener('click', () => {
+  if (confirm('Effacer toute la progression enregistrée en local ?')) {
+    S = { seen: {}, unseen: {}, watch: {} };
+    grid = [];
+    save();
+    renderGrid();
+    $('#msg').textContent = 'Session locale réinitialisée.';
+  }
+});
+
+// Init
+save();
+if (keys.a && keys.t) {
+  loadLLMSuggestions();
+  nextClassic();
+} else {
+  $('#msg').textContent = 'Clique sur « ⚙️ Clés » pour renseigner tes clés Gemini et TMDB.';
+}
+</script>
+</body>
+</html>
