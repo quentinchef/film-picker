@@ -10,7 +10,7 @@
 body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 system-ui,-apple-system,sans-serif;-webkit-tap-highlight-color:transparent}
 header{position:sticky;top:0;z-index:30;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:var(--bar);border-bottom:1px solid var(--bd)}
 header b{font-size:13px;white-space:nowrap}
-#hint{flex:1;min-width:140px;padding:7px 10px;border-radius:4px;border:1px solid #3a4651;background:var(--bg);color:var(--tx)}
+#hint{flex:1;min-width:160px;padding:7px 10px;border-radius:4px;border:1px solid #3a4651;background:var(--bg);color:var(--tx)}
 button{padding:7px 11px;border:0;border-radius:4px;background:#2c3640;color:var(--tx);font:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-size:13px}
 button:hover{background:#3a4651}
 #next{background:var(--ac);color:#111;font-weight:600}
@@ -94,7 +94,7 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
   <button id="tab-seen" class="nav-tab"><span id="n">0</span> vus</button>
   <button id="tab-watch" class="nav-tab"><span id="w">0</span> à voir</button>
   <button id="next">Grille suivante</button>
-  <input id="hint" placeholder="Film, réalisateur, acteur…">
+  <input id="hint" placeholder="« film français 2000s », « Nolan », « horreur coréenne »…">
   <button id="ask" style="background:#2c5f7a">Chercher</button>
   <button id="all">Tout cocher</button>
   <button id="sync-push" title="Sauvegarder sur GitHub Gist">☁️ Sauver</button>
@@ -200,9 +200,10 @@ const $ = s => document.querySelector(s);
 const MODELS = ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'];
 
 const TMDB_GENRES = {
-  "action": 28, "aventure": 12, "animation": 16, "comédie": 35, "crime": 80,
-  "documentaire": 99, "drame": 18, "famille": 10751, "fantastique": 14, "histoire": 36,
-  "horreur": 27, "musique": 10402, "mystère": 9648, "romance": 10749, "science-fiction": 878,
+  "action": 28, "aventure": 12, "animation": 16, "comédie": 35, "comedie": 35,
+  "crime": 80, "policier": 80, "documentaire": 99, "drame": 18, "famille": 10751,
+  "fantastique": 14, "histoire": 36, "horreur": 27, "musique": 10402, "mystère": 9648,
+  "mystere": 9648, "romance": 10749, "science-fiction": 878, "sf": 878,
   "téléfilm": 10770, "thriller": 53, "guerre": 10752, "western": 37
 };
 
@@ -222,7 +223,15 @@ let keys = load('lb_keys', {
 let grid = [];
 let currentView = 'explore';
 
-// Gestion de l'affiche et réparation automatique si f.p est absent
+// État de la navigation courante (pour pagination continue sans interruption)
+let browseState = {
+  mode: 'general', // 'general', 'discover', 'person'
+  page: 1,
+  label: 'Grille générale',
+  discoverParams: null,
+  personBuffer: []
+};
+
 function getPosterSrc(film) {
   if (film.p) return `https://image.tmdb.org/t/p/w342${film.p}`;
   if (keys.t) {
@@ -260,12 +269,10 @@ function closeSidebar() {
   $('#sidebar').classList.remove('open');
   $('#sidebar-backdrop').classList.remove('open');
 }
-
 function toggleSidebar() {
   const isOpen = $('#sidebar').classList.toggle('open');
   $('#sidebar-backdrop').classList.toggle('open', isOpen);
 }
-
 $('#toggle-sidebar').onclick = toggleSidebar;
 $('#close-sidebar').onclick = closeSidebar;
 $('#sidebar-backdrop').onclick = closeSidebar;
@@ -299,7 +306,6 @@ async function showMovieDetails(filmId) {
     $('#movie-details-content').innerHTML = `<div style="color:var(--bad)">Erreur : ${e.message}</div>`;
   }
 }
-
 $('#modal-movie-close').onclick = () => $('#modal-movie').style.display = 'none';
 
 // ----------------- SYNCHRONISATION GITHUB GIST -----------------
@@ -381,7 +387,7 @@ $('#cfg-save').onclick = () => {
   $('#msg').textContent = 'Réglages enregistrés.';
   if (keys.a && keys.t && !grid.length) {
     loadLLMSuggestions();
-    nextClassic();
+    fetchNextBatch();
   }
 };
 
@@ -394,30 +400,7 @@ function hasKeys() {
   return true;
 }
 
-// ----------------- APIS TMDB & GEMINI -----------------
-
-async function callGemini(system, prompt, temp = 0.7) {
-  const mk = m => JSON.stringify({
-    systemInstruction: { parts: [{ text: system }] },
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { responseMimeType: 'application/json', temperature: temp,
-      ...(m.startsWith('gemini-2.5') ? { thinkingConfig: { thinkingBudget: 0 } } : {}) }
-  });
-  let j, last, used;
-  for (const m of MODELS) {
-    try {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
-        method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': keys.a }, body: mk(m)
-      });
-      j = await r.json();
-      if (!j.error) { used = m; break; }
-      last = j.error;
-    } catch(e) {}
-  }
-  if (!used) throw new Error(last?.message || 'Erreur Gemini');
-  const text = j.candidates[0].content.parts.filter(p => !p.thought).map(p => p.text).join('');
-  return JSON.parse(text.match(/\[[\s\S]*\]|\{[\s\S]*\}/)[0]);
-}
+// ----------------- MOTEUR TMDB EXHAUSTIF -----------------
 
 async function searchPerson(name) {
   const q = `https://api.themoviedb.org/3/search/person?api_key=${keys.t}&query=${encodeURIComponent(name)}&language=fr-FR`;
@@ -448,37 +431,171 @@ async function fetchPersonCredits(personId, role = 'director') {
     o: m.original_title,
     y: (m.release_date || '').slice(0, 4) || '—',
     p: m.poster_path
-  }));
+  })).filter(m => m.p);
 }
 
-async function fetchDiscoverFull(params) {
-  let page = 1;
+// Interrogation paginée TMDB Discover : parcourt autant de pages que nécessaire jusqu'à remplir le quota
+async function fetchDiscoverBatch(params, targetCount) {
   const out = [];
-  while (page <= 5) {
+  const known = id => S.seen[id] || S.unseen[id] || S.watch[id];
+  let page = browseState.page || 1;
+  let emptyPages = 0;
+
+  while (out.length < targetCount && page <= 100 && emptyPages < 5) {
     const url = new URL('https://api.themoviedb.org/3/discover/movie');
     url.searchParams.set('api_key', keys.t);
     url.searchParams.set('language', 'fr-FR');
     url.searchParams.set('sort_by', 'vote_count.desc');
     url.searchParams.set('include_adult', 'false');
     url.searchParams.set('page', page);
-    if (params.with_genres) url.searchParams.set('with_genres', params.with_genres);
-    if (params.with_origin_country) url.searchParams.set('with_origin_country', params.with_origin_country);
-    if (params.year_gte) url.searchParams.set('primary_release_date.gte', `${params.year_gte}-01-01`);
-    if (params.year_lte) url.searchParams.set('primary_release_date.lte', `${params.year_lte}-12-31`);
+
+    if (params) {
+      if (params.with_genres) url.searchParams.set('with_genres', params.with_genres);
+      if (params.with_origin_country) url.searchParams.set('with_origin_country', params.with_origin_country);
+      if (params.year_gte) url.searchParams.set('primary_release_date.gte', `${params.year_gte}-01-01`);
+      if (params.year_lte) url.searchParams.set('primary_release_date.lte', `${params.year_lte}-12-31`);
+    }
 
     const res = await (await fetch(url.toString())).json();
-    if (!res.results || !res.results.length) break;
-    out.push(...res.results);
+    if (!res.results || !res.results.length) {
+      emptyPages++;
+      break;
+    }
+
+    for (const m of res.results) {
+      if (m.poster_path && !known(m.id) && !out.some(f => f.id === m.id)) {
+        out.push({
+          id: m.id,
+          t: m.title || m.original_title,
+          o: m.original_title,
+          y: (m.release_date || '').slice(0, 4) || '—',
+          p: m.poster_path
+        });
+      }
+      if (out.length >= targetCount) break;
+    }
     page++;
   }
-  return out.map(m => ({
-    id: m.id,
-    t: m.title || m.original_title,
-    o: m.original_title,
-    y: (m.release_date || '').slice(0, 4) || '—',
-    p: m.poster_path
-  }));
+
+  browseState.page = page;
+  return out;
 }
+
+// ----------------- CHARGEMENT DU BATCH SUIVANT -----------------
+
+async function fetchNextBatch() {
+  if (!hasKeys()) return;
+  switchToExplore();
+  record();
+
+  const count = computeScreenBatchSize();
+  $('#msg').textContent = `Chargement (${browseState.label})...`;
+
+  let out = [];
+  const known = id => S.seen[id] || S.unseen[id] || S.watch[id];
+
+  if (browseState.mode === 'person') {
+    while (browseState.personBuffer.length && out.length < count) {
+      const f = browseState.personBuffer.shift();
+      if (!known(f.id) && !out.some(o => o.id === f.id)) out.push(f);
+    }
+  } else {
+    // general ou discover
+    out = await fetchDiscoverBatch(browseState.discoverParams, count);
+  }
+
+  grid = out;
+  renderGrid();
+  $('#perf').textContent = `${browseState.label} · ${grid.length} affiches affichées`;
+  $('#msg').textContent = grid.length ? '' : 'Plus aucun nouveau film disponible pour ce filtre.';
+  scrollTo(0, 0);
+}
+
+// ----------------- RECHERCHE INTELLIGENTE PAR INTERPRÉTATION LLM -----------------
+
+async function parseSearchIntent(text) {
+  const system = `Tu es un parseur strict pour l'API TMDB discover/movie.
+Analyse la requête utilisateur et renvoie UNIQUEMENT un objet JSON avec cette structure :
+{
+  "is_person": boolean,
+  "person_name": string ou null,
+  "person_role": "director" ou "actor",
+  "with_origin_country": string (code ISO 2 lettres: FR, US, KR, JP, IT, GB, ES, HK, etc.) ou null,
+  "genres": tableau parmi [action, aventure, animation, comédie, crime, documentaire, drame, famille, fantastique, histoire, horreur, musique, mystère, romance, science-fiction, thriller, guerre, western],
+  "year_gte": number ou null,
+  "year_lte": number ou null,
+  "literal_title": string ou null (si c'est clairement un titre de film précis)
+}`;
+
+  const prompt = `Requête : "${text}"`;
+  const res = await callGemini(system, prompt, 0.2);
+  return res;
+}
+
+$('#ask').onclick = async () => {
+  const query = $('#hint').value.trim();
+  if (!query || !hasKeys()) return;
+  switchToExplore();
+  record();
+  $('#msg').textContent = `Analyse et recherche TMDB pour "${query}"...`;
+
+  try {
+    const parsed = await parseSearchIntent(query);
+
+    // 1. Si c'est un réalisateur ou acteur identifié
+    if (parsed.is_person && parsed.person_name) {
+      const person = await searchPerson(parsed.person_name);
+      if (person) {
+        const isDir = parsed.person_role === 'director' || person.known_for_department === 'Directing';
+        const credits = await fetchPersonCredits(person.id, isDir ? 'director' : 'actor');
+        browseState = {
+          mode: 'person',
+          label: `${person.name} (${isDir ? 'Réalisateur' : 'Acteur'})`,
+          personBuffer: credits
+        };
+        fetchNextBatch();
+        return;
+      }
+    }
+
+    // 2. Si c'est un titre de film précis
+    if (parsed.literal_title && !parsed.with_origin_country && !parsed.year_gte && (!parsed.genres || !parsed.genres.length)) {
+      const q = `https://api.themoviedb.org/3/search/movie?api_key=${keys.t}&query=${encodeURIComponent(parsed.literal_title)}&language=fr-FR`;
+      const res = await (await fetch(q)).json();
+      const known = id => S.seen[id] || S.unseen[id] || S.watch[id];
+      grid = (res.results || [])
+        .filter(m => m.poster_path && !known(m.id))
+        .map(m => ({ id: m.id, t: m.title, o: m.original_title, y: (m.release_date || '').slice(0, 4) || '—', p: m.poster_path }));
+      browseState = { mode: 'general', page: 1, label: `Titre : ${parsed.literal_title}` };
+      renderGrid();
+      $('#perf').textContent = `Résultats titre pour "${parsed.literal_title}" (${grid.length})`;
+      $('#msg').textContent = grid.length ? '' : 'Aucun résultat disponible.';
+      return;
+    }
+
+    // 3. Critères thématiques (ex: "film francais annees 2000", "horreur coréenne")
+    const params = {
+      year_gte: parsed.year_gte,
+      year_lte: parsed.year_lte,
+      with_origin_country: parsed.with_origin_country
+    };
+    if (parsed.genres && parsed.genres.length) {
+      const gIds = parsed.genres.map(g => TMDB_GENRES[g.toLowerCase()]).filter(Boolean);
+      if (gIds.length) params.with_genres = gIds.join(',');
+    }
+
+    browseState = {
+      mode: 'discover',
+      page: 1,
+      label: query,
+      discoverParams: params
+    };
+    fetchNextBatch();
+
+  } catch(e) {
+    $('#msg').textContent = 'Erreur d\'analyse : ' + e.message;
+  }
+};
 
 // ----------------- SUGGESTIONS CIBLÉES -----------------
 
@@ -525,14 +642,17 @@ async function selectFacet(facet, cardEl) {
   if (cardEl) cardEl.classList.add('active');
   
   switchToExplore();
-  $('#msg').textContent = `Chargement de "${facet.label}"...`;
   record();
 
-  let allFilms = [];
   if (facet.type === 'director' || facet.type === 'actor') {
     const person = await searchPerson(facet.name);
     if (!person) return alert(`Introuvable sur TMDB : ${facet.name}`);
-    allFilms = await fetchPersonCredits(person.id, facet.type);
+    const credits = await fetchPersonCredits(person.id, facet.type);
+    browseState = {
+      mode: 'person',
+      label: facet.label,
+      personBuffer: credits
+    };
   } else {
     const params = {
       year_gte: facet.year_gte,
@@ -543,51 +663,38 @@ async function selectFacet(facet, cardEl) {
       const gIds = facet.genres.map(g => TMDB_GENRES[g.toLowerCase()]).filter(Boolean);
       if (gIds.length) params.with_genres = gIds.join(',');
     }
-    allFilms = await fetchDiscoverFull(params);
+    browseState = {
+      mode: 'discover',
+      page: 1,
+      label: facet.label,
+      discoverParams: params
+    };
   }
 
-  const known = id => S.seen[id] || S.unseen[id] || S.watch[id];
-  grid = allFilms.filter(f => !known(f.id));
-
-  renderGrid();
-  $('#perf').textContent = `${facet.label} · ${allFilms.length} films au total (${grid.length} restants à classer)`;
-  $('#msg').textContent = grid.length ? '' : 'Tous les films de ce critère ont déjà été classés !';
-  scrollTo(0, 0);
+  fetchNextBatch();
 }
 
-// ----------------- GRILLE CLASSIQUE -----------------
-
-async function nextClassic() {
-  if (!hasKeys()) return;
-  switchToExplore();
-  record();
-  
-  const count = computeScreenBatchSize();
-  $('#msg').textContent = `Chargement d'une grille adaptée (${count} films)...`;
-
-  try {
-    const page = Math.floor(Math.random() * 8) + 1;
-    const url = `https://api.themoviedb.org/3/discover/movie?api_key=${keys.t}&language=fr-FR&sort_by=vote_count.desc&page=${page}&vote_count.gte=300`;
-    const res = await (await fetch(url)).json();
-    const known = id => S.seen[id] || S.unseen[id] || S.watch[id];
-    
-    grid = (res.results || [])
-      .filter(m => m.poster_path && !known(m.id))
-      .slice(0, count)
-      .map(m => ({
-        id: m.id,
-        t: m.title || m.original_title,
-        o: m.original_title,
-        y: (m.release_date || '').slice(0, 4) || '—',
-        p: m.poster_path
-      }));
-
-    renderGrid();
-    $('#perf').textContent = `Grille générale (${grid.length} affiches)`;
-    $('#msg').textContent = grid.length ? '' : 'Plus de nouveaux films trouvés, reclique.';
-  } catch(e) {
-    $('#msg').textContent = 'Erreur : ' + e.message;
+async function callGemini(system, prompt, temp = 0.7) {
+  const mk = m => JSON.stringify({
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { responseMimeType: 'application/json', temperature: temp,
+      ...(m.startsWith('gemini-2.5') ? { thinkingConfig: { thinkingBudget: 0 } } : {}) }
+  });
+  let j, last, used;
+  for (const m of MODELS) {
+    try {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
+        method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': keys.a }, body: mk(m)
+      });
+      j = await r.json();
+      if (!j.error) { used = m; break; }
+      last = j.error;
+    } catch(e) {}
   }
+  if (!used) throw new Error(last?.message || 'Erreur Gemini');
+  const text = j.candidates[0].content.parts.filter(p => !p.thought).map(p => p.text).join('');
+  return JSON.parse(text.match(/\[[\s\S]*\]|\{[\s\S]*\}/)[0]);
 }
 
 // ----------------- VUES LISTES (VUS / WATCHLIST) -----------------
@@ -721,45 +828,9 @@ function record() {
   save();
 }
 
-// ----------------- RECHERCHE & IMPORTS/EXPORTS -----------------
-
-$('#ask').onclick = async () => {
-  const query = $('#hint').value.trim();
-  if (!query || !hasKeys()) return;
-  switchToExplore();
-  record();
-  $('#msg').textContent = `Recherche TMDB pour "${query}"...`;
-
-  const person = await searchPerson(query);
-  if (person && (person.popularity > 2 || person.known_for_department)) {
-    const isDirector = person.known_for_department === 'Directing';
-    const credits = await fetchPersonCredits(person.id, isDirector ? 'director' : 'actor');
-    const known = id => S.seen[id] || S.unseen[id] || S.watch[id];
-    grid = credits.filter(f => !known(f.id));
-    renderGrid();
-    $('#perf').textContent = `${person.name} (${isDirector ? 'Réalisateur' : 'Acteur'}) : ${credits.length} films (${grid.length} restants)`;
-    $('#msg').textContent = grid.length ? '' : 'Filmographie déjà entièrement classée.';
-    return;
-  }
-
-  try {
-    const q = `https://api.themoviedb.org/3/search/movie?api_key=${keys.t}&query=${encodeURIComponent(query)}&language=fr-FR`;
-    const res = await (await fetch(q)).json();
-    const known = id => S.seen[id] || S.unseen[id] || S.watch[id];
-    grid = (res.results || [])
-      .filter(m => m.poster_path && !known(m.id))
-      .map(m => ({ id: m.id, t: m.title, o: m.original_title, y: (m.release_date || '').slice(0, 4) || '—', p: m.poster_path }));
-    renderGrid();
-    $('#perf').textContent = `Résultats pour "${query}"`;
-    $('#msg').textContent = grid.length ? '' : 'Aucun résultat trouvé.';
-  } catch(e) {
-    $('#msg').textContent = 'Erreur : ' + e.message;
-  }
-};
-
 $('#hint').onkeydown = e => { if (e.key === 'Enter') $('#ask').click(); };
 $('#gen-facets').onclick = loadLLMSuggestions;
-$('#next').onclick = nextClassic;
+$('#next').onclick = fetchNextBatch;
 
 $('#all').onclick = () => {
   const on = !grid.every(f => f.sel);
@@ -822,6 +893,7 @@ $('#btn-reset-all').onclick = () => {
   if (confirm('Effacer toutes les données locales ?')) {
     S = { seen: {}, unseen: {}, watch: {} };
     grid = [];
+    browseState = { mode: 'general', page: 1, label: 'Grille générale', discoverParams: null, personBuffer: [] };
     save();
     closeKeyModal();
     renderGrid();
@@ -832,7 +904,7 @@ $('#btn-reset-all').onclick = () => {
 save();
 if (keys.a && keys.t) {
   loadLLMSuggestions();
-  nextClassic();
+  fetchNextBatch();
 } else {
   $('#msg').textContent = 'Clique sur « ⚙️ » pour configurer tes clés API.';
 }
