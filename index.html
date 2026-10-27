@@ -222,9 +222,22 @@ let keys = load('lb_keys', {
 let grid = [];
 let currentView = 'explore';
 
-function posterUrl(p) {
-  if (p) return `https://image.tmdb.org/t/p/w342${p}`;
-  return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="140" height="210" viewBox="0 0 140 210"><rect width="140" height="210" fill="%23222b33"/><text x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%238a96a0" font-family="sans-serif" font-size="12">Sans affiche</text></svg>';
+// Gestion de l'affiche et réparation automatique si f.p est absent
+function getPosterSrc(film) {
+  if (film.p) return `https://image.tmdb.org/t/p/w342${film.p}`;
+  if (keys.t) {
+    fetch(`https://api.themoviedb.org/3/movie/${film.id}?api_key=${keys.t}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.poster_path) {
+          film.p = d.poster_path;
+          save();
+          const el = document.getElementById(`img-${film.id}`);
+          if (el) el.src = `https://image.tmdb.org/t/p/w342${d.poster_path}`;
+        }
+      }).catch(() => {});
+  }
+  return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="140" height="210" viewBox="0 0 140 210"><rect width="140" height="210" fill="%23222b33"/><text x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%238a96a0" font-family="sans-serif" font-size="11">Chargement...</text></svg>';
 }
 
 function computeScreenBatchSize() {
@@ -272,14 +285,14 @@ async function showMovieDetails(filmId) {
     const genres = (res.genres || []).map(g => g.name).join(', ');
 
     $('#movie-details-content').innerHTML = `
-      <img src="${posterUrl(res.poster_path)}" alt="">
+      <img src="${res.poster_path ? 'https://image.tmdb.org/t/p/w342' + res.poster_path : ''}" alt="">
       <div class="movie-details-info">
         <b>${res.title} (${(res.release_date || '').slice(0, 4)})</b>
         <div class="meta">${res.original_title !== res.title ? res.original_title + ' · ' : ''}⭐ ${res.vote_average ? res.vote_average.toFixed(1) : '—'}/10 (${res.vote_count} votes)</div>
         <div class="meta" style="margin-top:2px">🎬 ${directors}</div>
         <div class="meta">🎭 ${actors}</div>
         <div class="meta">🏷️ ${genres}</div>
-        <p>${res.overview || 'Aucun synopsis en français disponible pour ce film.'}</p>
+        <p>${res.overview || 'Aucun synopsis disponible pour ce film.'}</p>
       </div>
     `;
   } catch(e) {
@@ -294,7 +307,7 @@ $('#modal-movie-close').onclick = () => $('#modal-movie').style.display = 'none'
 async function pushToGist() {
   if (!keys.gistId || !keys.ghToken) {
     openKeyModal();
-    return alert('Renseigne ton Gist ID et ton Token GitHub dans les réglages.');
+    return alert('Renseigne ton Gist ID et ton Token GitHub dans les réglages (⚙️).');
   }
   record();
   $('#perf').textContent = '☁️ Sauvegarde Gist en cours...';
@@ -320,7 +333,7 @@ async function pushToGist() {
 async function pullFromGist() {
   if (!keys.gistId || !keys.ghToken) {
     openKeyModal();
-    return alert('Renseigne ton Gist ID et ton Token GitHub dans les réglages.');
+    return alert('Renseigne ton Gist ID et ton Token GitHub dans les réglages (⚙️).');
   }
   $('#perf').textContent = '☁️ Téléchargement depuis GitHub Gist...';
   try {
@@ -611,7 +624,7 @@ function renderListView() {
     const card = document.createElement('div');
     card.className = 'list-item';
     card.innerHTML = `
-      <img src="${posterUrl(f.p)}" alt="" loading="lazy">
+      <img id="img-${f.id}" src="${getPosterSrc(f)}" alt="" loading="lazy">
       <div class="list-item-body">
         <div>
           <div class="list-item-title">${f.t}</div>
@@ -683,7 +696,7 @@ function renderGrid() {
     const d = document.createElement('div');
     const paint = () => { d.className = 'c' + (f.sel ? ' sel' : '') + (f.wl ? ' w' : '') };
     d.innerHTML = `
-      <img src="${posterUrl(f.p)}" alt="" loading="lazy">
+      <img id="img-${f.id}" src="${getPosterSrc(f)}" alt="" loading="lazy">
       <span>${f.t} (${f.y})</span>
       <button class="wl">＋ à voir</button>
       <button class="btn-info" title="Détails du film">ℹ</button>
