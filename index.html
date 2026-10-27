@@ -18,8 +18,8 @@ button:hover{background:#3a4651}
 .nav-tab{background:transparent;border:1px solid var(--bd)}
 .nav-tab.active{background:#23323f;border-color:var(--ok);color:var(--ok);font-weight:600}
 
-.layout{display:flex;min-height:calc(100vh - 49px)}
-aside{width:290px;min-width:260px;background:var(--panel);border-right:1px solid var(--bd);padding:14px;display:flex;flex-direction:column;gap:12px}
+.layout{display:flex;min-height:calc(100vh - 49px);position:relative}
+aside{width:290px;min-width:260px;background:var(--panel);border-right:1px solid var(--bd);padding:14px;display:flex;flex-direction:column;gap:12px;z-index:40}
 aside h3{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--mu);display:flex;justify-content:space-between;align-items:center}
 .pill-list{display:flex;flex-direction:column;gap:8px;overflow-y:auto;max-height:calc(100vh - 160px)}
 .sug-card{background:#232b33;border:1px solid #2f3a46;border-radius:6px;padding:8px 10px;cursor:pointer;transition:border-color .15s,background .15s;text-align:left}
@@ -28,13 +28,15 @@ aside h3{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.5px;co
 .sug-card span{display:block;font-size:11px;color:var(--mu)}
 .sug-card.active{border-color:var(--ac);background:#2c2820}
 
+#sidebar-backdrop{display:none;position:fixed;top:49px;left:0;right:0;bottom:0;background:#0008;z-index:35}
+
 .content{flex:1;display:flex;flex-direction:column}
 #perf{padding:6px 14px;color:var(--mu);font-size:12px;background:#111417;border-bottom:1px solid #1e242a;min-height:28px}
 #msg{padding:12px;text-align:center;color:var(--mu);font-size:13px}
 main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:10px;padding:12px;flex:1;align-content:start}
 
 .c{position:relative;aspect-ratio:2/3;border-radius:4px;overflow:hidden;background:#222b33;cursor:pointer;outline:2px solid transparent;outline-offset:-2px}
-.c img{width:100%;height:100%;object-fit:cover;display:block}
+.c img{width:100%;height:100%;object-fit:cover;display:block;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
 .c.sel{outline-color:var(--ok)}
 .c.sel img{opacity:.4}
 .c.sel::after{content:"✓ vu";position:absolute;top:6px;right:6px;background:var(--ok);color:#111;font-weight:700;font-size:11px;padding:2px 6px;border-radius:3px}
@@ -45,7 +47,7 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
 .c.w .wl{background:var(--ac);color:#111;font-weight:700}
 .c.sel .wl{display:none}
 
-.btn-info{position:absolute;bottom:6px;right:6px;background:#0009;border:0;color:#fff;border-radius:50%;width:22px;height:22px;padding:0;font-size:12px;display:flex;align-items:center;justify-content:center;z-index:5}
+.btn-info{position:absolute;bottom:6px;right:6px;background:#0009;border:0;color:#fff;border-radius:50%;width:24px;height:24px;padding:0;font-size:12px;display:flex;align-items:center;justify-content:center;z-index:5}
 .btn-info:hover{background:var(--ok);color:#111}
 
 /* Gestionnaire de liste */
@@ -54,7 +56,7 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
 .list-toolbar input, .list-toolbar select{padding:6px 10px;border-radius:4px;border:1px solid #3a4651;background:var(--bg);color:var(--tx);font:inherit}
 .list-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
 .list-item{background:#222b33;border-radius:4px;overflow:hidden;border:1px solid var(--bd);display:flex;flex-direction:column}
-.list-item img{width:100%;aspect-ratio:2/3;object-fit:cover;cursor:pointer}
+.list-item img{width:100%;aspect-ratio:2/3;object-fit:cover;cursor:pointer;background:#181f26;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
 .list-item-body{padding:6px;display:flex;flex-direction:column;gap:4px;flex:1;justify-content:space-between}
 .list-item-title{font-size:11px;font-weight:600;line-height:1.2}
 .list-item-sub{font-size:10px;color:var(--mu)}
@@ -69,7 +71,7 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
 .modal input{width:100%;padding:8px;border-radius:4px;border:1px solid #3a4651;background:var(--bg);color:var(--tx)}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
 
-/* Modale fiche film */
+/* Fiche film */
 .movie-details{display:flex;gap:14px}
 .movie-details img{width:100px;aspect-ratio:2/3;object-fit:cover;border-radius:4px}
 .movie-details-info{flex:1;display:flex;flex-direction:column;gap:4px}
@@ -78,8 +80,9 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
 .movie-details-info p{font-size:12px;margin:8px 0 0;line-height:1.4;color:#ccd3d8;max-height:180px;overflow-y:auto}
 
 @media(max-width:850px){
-  aside{position:fixed;bottom:0;top:49px;left:0;z-index:40;box-shadow:4px 0 15px #000a;transform:translateX(-100%);transition:transform .2s}
+  aside{position:fixed;bottom:0;top:49px;left:0;box-shadow:4px 0 15px #000a;transform:translateX(-100%);transition:transform .2s;width:85%;max-width:320px}
   aside.open{transform:translateX(0)}
+  #sidebar-backdrop.open{display:block}
 }
 </style>
 </head>
@@ -99,11 +102,16 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
   <button id="cfg">⚙️</button>
 </header>
 
+<div id="sidebar-backdrop"></div>
+
 <div class="layout">
   <aside id="sidebar">
     <h3>
       <span>Suggestions ciblées</span>
-      <button id="gen-facets" style="padding:2px 6px;font-size:11px">↻ Relancer</button>
+      <div style="display:flex;gap:4px">
+        <button id="gen-facets" style="padding:2px 6px;font-size:11px">↻</button>
+        <button id="close-sidebar" style="padding:2px 6px;font-size:11px">✕</button>
+      </div>
     </h3>
     <div style="font-size:11px;color:var(--mu)">
       Filtres d'exploration TMDB exhaustifs.
@@ -147,20 +155,18 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
 <!-- Modale Fiche Détail Film -->
 <div id="modal-movie" class="modal-backdrop">
   <div class="modal">
-    <div class="movie-details" id="movie-details-content">
-      <!-- Rempli en JS -->
-    </div>
+    <div class="movie-details" id="movie-details-content"></div>
     <div class="modal-actions">
       <button id="modal-movie-close">Fermer</button>
     </div>
   </div>
 </div>
 
-<!-- Modale Configuration & Sauvegardes locales -->
+<!-- Modale Configuration -->
 <div id="modal-cfg" class="modal-backdrop">
   <div class="modal">
     <h3>Configuration & Sauvegardes</h3>
-    <label for="key-gemini">Clé Gemini API (gratuite sur aistudio.google.com)</label>
+    <label for="key-gemini">Clé Gemini API (aistudio.google.com)</label>
     <input type="password" id="key-gemini" placeholder="AIzaSy...">
     
     <label for="key-tmdb">Clé TMDB API v3 (themoviedb.org)</label>
@@ -216,6 +222,11 @@ let keys = load('lb_keys', {
 let grid = [];
 let currentView = 'explore';
 
+function posterUrl(p) {
+  if (p) return `https://image.tmdb.org/t/p/w342${p}`;
+  return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="140" height="210" viewBox="0 0 140 210"><rect width="140" height="210" fill="%23222b33"/><text x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%238a96a0" font-family="sans-serif" font-size="12">Sans affiche</text></svg>';
+}
+
 function computeScreenBatchSize() {
   const w = window.innerWidth;
   const h = window.innerHeight - 100;
@@ -230,10 +241,26 @@ const save = () => {
   $('#w').textContent = Object.keys(S.watch).length;
 };
 
+// ----------------- SIDEBAR MOBILE -----------------
+
+function closeSidebar() {
+  $('#sidebar').classList.remove('open');
+  $('#sidebar-backdrop').classList.remove('open');
+}
+
+function toggleSidebar() {
+  const isOpen = $('#sidebar').classList.toggle('open');
+  $('#sidebar-backdrop').classList.toggle('open', isOpen);
+}
+
+$('#toggle-sidebar').onclick = toggleSidebar;
+$('#close-sidebar').onclick = closeSidebar;
+$('#sidebar-backdrop').onclick = closeSidebar;
+
 // ----------------- MODALE DÉTAILS FILM -----------------
 
 async function showMovieDetails(filmId) {
-  $('#movie-details-content').innerHTML = '<div style="color:var(--mu);font-size:12px">Chargement des informations TMDB...</div>';
+  $('#movie-details-content').innerHTML = '<div style="color:var(--mu);font-size:12px">Chargement TMDB...</div>';
   $('#modal-movie').style.display = 'flex';
 
   try {
@@ -245,7 +272,7 @@ async function showMovieDetails(filmId) {
     const genres = (res.genres || []).map(g => g.name).join(', ');
 
     $('#movie-details-content').innerHTML = `
-      <img src="https://image.tmdb.org/t/p/w342${res.poster_path}" alt="">
+      <img src="${posterUrl(res.poster_path)}" alt="">
       <div class="movie-details-info">
         <b>${res.title} (${(res.release_date || '').slice(0, 4)})</b>
         <div class="meta">${res.original_title !== res.title ? res.original_title + ' · ' : ''}⭐ ${res.vote_average ? res.vote_average.toFixed(1) : '—'}/10 (${res.vote_count} votes)</div>
@@ -256,7 +283,7 @@ async function showMovieDetails(filmId) {
       </div>
     `;
   } catch(e) {
-    $('#movie-details-content').innerHTML = `<div style="color:var(--bad)">Erreur lors de la récupération : ${e.message}</div>`;
+    $('#movie-details-content').innerHTML = `<div style="color:var(--bad)">Erreur : ${e.message}</div>`;
   }
 }
 
@@ -279,13 +306,11 @@ async function pushToGist() {
         'Authorization': `Bearer ${keys.ghToken}`
       },
       body: JSON.stringify({
-        files: {
-          'session-films.json': { content: JSON.stringify(S) }
-        }
+        files: { 'session-films.json': { content: JSON.stringify(S) } }
       })
     });
     if (!res.ok) throw new Error(`Erreur ${res.status}`);
-    $('#perf').textContent = `☁️ Synchronisé avec succès sur GitHub Gist (${new Date().toLocaleTimeString()})`;
+    $('#perf').textContent = `☁️ Synchronisé avec succès (${new Date().toLocaleTimeString()})`;
   } catch(e) {
     alert('Erreur Gist : ' + e.message);
     $('#perf').textContent = 'Échec de sauvegarde Gist.';
@@ -314,7 +339,7 @@ async function pullFromGist() {
       save();
       if (currentView === 'explore') renderGrid();
       else renderListView();
-      $('#perf').textContent = `☁️ Chargé depuis Gist : ${Object.keys(S.seen).length} vus, ${Object.keys(S.watch).length} à voir.`;
+      $('#perf').textContent = `☁️ Données Gist chargées : ${Object.keys(S.seen).length} vus, ${Object.keys(S.watch).length} à voir.`;
     }
   } catch(e) {
     alert('Erreur chargement Gist : ' + e.message);
@@ -410,13 +435,13 @@ async function fetchPersonCredits(personId, role = 'director') {
     o: m.original_title,
     y: (m.release_date || '').slice(0, 4) || '—',
     p: m.poster_path
-  })).filter(m => m.p);
+  }));
 }
 
 async function fetchDiscoverFull(params) {
   let page = 1;
   const out = [];
-  while (page <= 6) {
+  while (page <= 5) {
     const url = new URL('https://api.themoviedb.org/3/discover/movie');
     url.searchParams.set('api_key', keys.t);
     url.searchParams.set('language', 'fr-FR');
@@ -439,7 +464,7 @@ async function fetchDiscoverFull(params) {
     o: m.original_title,
     y: (m.release_date || '').slice(0, 4) || '—',
     p: m.poster_path
-  })).filter(m => m.p);
+  }));
 }
 
 // ----------------- SUGGESTIONS CIBLÉES -----------------
@@ -449,7 +474,7 @@ const rnd = (a, k) => [...a].sort(() => Math.random() - .5).slice(0, k);
 async function loadLLMSuggestions() {
   if (!hasKeys()) return;
   const sampleSeen = rnd(Object.values(S.seen), 30).map(f => `${f.o} (${f.y})`).join(', ');
-  const prompt = `Films vus : ${sampleSeen || 'Aucun'}. Propose 8 suggestions pour continuer : 3 grands réalisateurs, 2 acteurs stars, 3 filtres précis (pays, décennie, genre).`;
+  const prompt = `Films vus : ${sampleSeen || 'Aucun'}. Propose 8 suggestions variées : 3 réalisateurs, 2 acteurs stars, 3 filtres précis (pays, décennie, genre).`;
 
   const system = `Réponds UNIQUEMENT par JSON d'objets :
 - type : "director"|"actor"|"filter"
@@ -471,7 +496,10 @@ async function loadLLMSuggestions() {
       const card = document.createElement('div');
       card.className = 'sug-card';
       card.innerHTML = `<b>${item.label}</b><span>${item.desc || ''}</span>`;
-      card.onclick = () => selectFacet(item, card);
+      card.onclick = () => {
+        closeSidebar();
+        selectFacet(item, card);
+      };
       container.appendChild(card);
     });
   } catch(e) {
@@ -514,7 +542,7 @@ async function selectFacet(facet, cardEl) {
   scrollTo(0, 0);
 }
 
-// ----------------- GRILLE CLASSIQUE ADAPTATIVE -----------------
+// ----------------- GRILLE CLASSIQUE -----------------
 
 async function nextClassic() {
   if (!hasKeys()) return;
@@ -583,7 +611,7 @@ function renderListView() {
     const card = document.createElement('div');
     card.className = 'list-item';
     card.innerHTML = `
-      <img src="https://image.tmdb.org/t/p/w342${f.p}" alt="" loading="lazy">
+      <img src="${posterUrl(f.p)}" alt="" loading="lazy">
       <div class="list-item-body">
         <div>
           <div class="list-item-title">${f.t}</div>
@@ -655,7 +683,7 @@ function renderGrid() {
     const d = document.createElement('div');
     const paint = () => { d.className = 'c' + (f.sel ? ' sel' : '') + (f.wl ? ' w' : '') };
     d.innerHTML = `
-      <img src="https://image.tmdb.org/t/p/w342${f.p}" alt="" loading="lazy">
+      <img src="${posterUrl(f.p)}" alt="" loading="lazy">
       <span>${f.t} (${f.y})</span>
       <button class="wl">＋ à voir</button>
       <button class="btn-info" title="Détails du film">ℹ</button>
@@ -719,7 +747,6 @@ $('#ask').onclick = async () => {
 $('#hint').onkeydown = e => { if (e.key === 'Enter') $('#ask').click(); };
 $('#gen-facets').onclick = loadLLMSuggestions;
 $('#next').onclick = nextClassic;
-$('#toggle-sidebar').onclick = () => $('#sidebar').classList.toggle('open');
 
 $('#all').onclick = () => {
   const on = !grid.every(f => f.sel);
