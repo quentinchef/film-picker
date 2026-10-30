@@ -94,7 +94,7 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
   <button id="tab-seen" class="nav-tab"><span id="n">0</span> vus</button>
   <button id="tab-watch" class="nav-tab"><span id="w">0</span> à voir</button>
   <button id="next">Grille suivante</button>
-  <input id="hint" placeholder="« film français 2000s », « Nolan », « horreur coréenne »…">
+  <input id="hint" placeholder="« 007 », « film français 2000s », « Nolan »…">
   <button id="ask" style="background:#2c5f7a">Chercher</button>
   <button id="all">Tout cocher</button>
   <button id="sync-push" title="Sauvegarder sur GitHub Gist">☁️ Sauver</button>
@@ -114,7 +114,7 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
       </div>
     </h3>
     <div style="font-size:11px;color:var(--mu)">
-      Filtres d'exploration TMDB exhaustifs.
+      Sagas, réalisateurs et filtres TMDB exhaustifs.
     </div>
     <div class="pill-list" id="suggestions-container">
       <div style="color:var(--mu);font-size:12px">Chargement...</div>
@@ -223,13 +223,12 @@ let keys = load('lb_keys', {
 let grid = [];
 let currentView = 'explore';
 
-// État de la navigation courante (pour pagination continue sans interruption)
 let browseState = {
-  mode: 'general', // 'general', 'discover', 'person'
+  mode: 'general',
   page: 1,
   label: 'Grille générale',
   discoverParams: null,
-  personBuffer: []
+  buffer: []
 };
 
 function getPosterSrc(film) {
@@ -400,7 +399,7 @@ function hasKeys() {
   return true;
 }
 
-// ----------------- MOTEUR TMDB EXHAUSTIF -----------------
+// ----------------- MOTEUR TMDB AVEC SAGAS / COLLECTIONS -----------------
 
 async function searchPerson(name) {
   const q = `https://api.themoviedb.org/3/search/person?api_key=${keys.t}&query=${encodeURIComponent(name)}&language=fr-FR`;
@@ -434,7 +433,32 @@ async function fetchPersonCredits(personId, role = 'director') {
   })).filter(m => m.p);
 }
 
-// Interrogation paginée TMDB Discover : parcourt autant de pages que nécessaire jusqu'à remplir le quota
+// Récupère l'intégralité d'une saga (ex: James Bond, Star Wars, Harry Potter...)
+async function fetchCollectionMovies(collectionId) {
+  const q = `https://api.themoviedb.org/3/collection/${collectionId}?api_key=${keys.t}&language=fr-FR`;
+  const data = await (await fetch(q)).json();
+  const parts = data.parts || [];
+  
+  // Tri chronologique des films de la saga
+  parts.sort((a, b) => (a.release_date || '').localeCompare(b.release_date || ''));
+
+  return parts.map(m => ({
+    id: m.id,
+    t: m.title || m.original_title,
+    o: m.original_title,
+    y: (m.release_date || '').slice(0, 4) || '—',
+    p: m.poster_path
+  })).filter(m => m.p);
+}
+
+// Recherche de saga/collection par mot clé sur TMDB
+async function searchCollection(name) {
+  const q = `https://api.themoviedb.org/3/search/collection?api_key=${keys.t}&query=${encodeURIComponent(name)}&language=fr-FR`;
+  const res = await (await fetch(q)).json();
+  return res.results?.[0] || null;
+}
+
+// Interrogation paginée TMDB Discover
 async function fetchDiscoverBatch(params, targetCount) {
   const out = [];
   const known = id => S.seen[id] || S.unseen[id] || S.watch[id];
@@ -494,37 +518,38 @@ async function fetchNextBatch() {
   let out = [];
   const known = id => S.seen[id] || S.unseen[id] || S.watch[id];
 
-  if (browseState.mode === 'person') {
-    while (browseState.personBuffer.length && out.length < count) {
-      const f = browseState.personBuffer.shift();
+  if (browseState.mode === 'buffer') {
+    while (browseState.buffer.length && out.length < count) {
+      const f = browseState.buffer.shift();
       if (!known(f.id) && !out.some(o => o.id === f.id)) out.push(f);
     }
   } else {
-    // general ou discover
     out = await fetchDiscoverBatch(browseState.discoverParams, count);
   }
 
   grid = out;
   renderGrid();
   $('#perf').textContent = `${browseState.label} · ${grid.length} affiches affichées`;
-  $('#msg').textContent = grid.length ? '' : 'Plus aucun nouveau film disponible pour ce filtre.';
+  $('#msg').textContent = grid.length ? '' : 'Plus aucun film à classer pour ce filtre !';
   scrollTo(0, 0);
 }
 
-// ----------------- RECHERCHE INTELLIGENTE PAR INTERPRÉTATION LLM -----------------
+// ----------------- RECHERCHE INTELLIGENTE -----------------
 
 async function parseSearchIntent(text) {
-  const system = `Tu es un parseur strict pour l'API TMDB discover/movie.
-Analyse la requête utilisateur et renvoie UNIQUEMENT un objet JSON avec cette structure :
+  const system = `Tu es un parseur pour l'API cinématographique TMDB.
+Analyse la requête de l'utilisateur et renvoie UNIQUEMENT un JSON structuré ainsi :
 {
-  "is_person": boolean,
+  "is_franchise": boolean (true pour 007, James Bond, Harry Potter, Star Wars, MCU, etc.),
+  "franchise_name": string ou null (ex: "James Bond", "Star Wars"),
+  "is_person": boolean (true si c'est un réalisateur ou acteur),
   "person_name": string ou null,
   "person_role": "director" ou "actor",
-  "with_origin_country": string (code ISO 2 lettres: FR, US, KR, JP, IT, GB, ES, HK, etc.) ou null,
+  "with_origin_country": string ISO 2 lettres ou null (FR pour français, US, KR pour coréen, JP pour japonais, IT pour italien, GB pour britannique, etc.),
   "genres": tableau parmi [action, aventure, animation, comédie, crime, documentaire, drame, famille, fantastique, histoire, horreur, musique, mystère, romance, science-fiction, thriller, guerre, western],
   "year_gte": number ou null,
   "year_lte": number ou null,
-  "literal_title": string ou null (si c'est clairement un titre de film précis)
+  "literal_title": string ou null
 }`;
 
   const prompt = `Requête : "${text}"`;
@@ -537,28 +562,47 @@ $('#ask').onclick = async () => {
   if (!query || !hasKeys()) return;
   switchToExplore();
   record();
-  $('#msg').textContent = `Analyse et recherche TMDB pour "${query}"...`;
+  $('#msg').textContent = `Recherche de "${query}"...`;
 
   try {
     const parsed = await parseSearchIntent(query);
 
-    // 1. Si c'est un réalisateur ou acteur identifié
-    if (parsed.is_person && parsed.person_name) {
-      const person = await searchPerson(parsed.person_name);
-      if (person) {
-        const isDir = parsed.person_role === 'director' || person.known_for_department === 'Directing';
-        const credits = await fetchPersonCredits(person.id, isDir ? 'director' : 'actor');
+    // Cas 1 : Franchise / Saga (ex: 007, James Bond, Star Wars)
+    if (parsed.is_franchise || /007|james bond/i.test(query)) {
+      const colName = parsed.franchise_name || (query.match(/007/i) ? 'James Bond' : query);
+      let col = await searchCollection(colName);
+      // Fallback ID officiel James Bond EON Productions
+      const colId = col ? col.id : (/007|bond/i.test(colName) ? 645 : null);
+
+      if (colId) {
+        const movies = await fetchCollectionMovies(colId);
         browseState = {
-          mode: 'person',
-          label: `${person.name} (${isDir ? 'Réalisateur' : 'Acteur'})`,
-          personBuffer: credits
+          mode: 'buffer',
+          label: `Saga : ${col ? col.name : 'James Bond'} (${movies.length} films)`,
+          buffer: movies
         };
         fetchNextBatch();
         return;
       }
     }
 
-    // 2. Si c'est un titre de film précis
+    // Cas 2 : Réalisateur ou Acteur
+    if (parsed.is_person && parsed.person_name) {
+      const person = await searchPerson(parsed.person_name);
+      if (person) {
+        const isDir = parsed.person_role === 'director' || person.known_for_department === 'Directing';
+        const credits = await fetchPersonCredits(person.id, isDir ? 'director' : 'actor');
+        browseState = {
+          mode: 'buffer',
+          label: `${person.name} (${isDir ? 'Réalisateur' : 'Acteur'}) · ${credits.length} films`,
+          buffer: credits
+        };
+        fetchNextBatch();
+        return;
+      }
+    }
+
+    // Cas 3 : Titre précis
     if (parsed.literal_title && !parsed.with_origin_country && !parsed.year_gte && (!parsed.genres || !parsed.genres.length)) {
       const q = `https://api.themoviedb.org/3/search/movie?api_key=${keys.t}&query=${encodeURIComponent(parsed.literal_title)}&language=fr-FR`;
       const res = await (await fetch(q)).json();
@@ -573,7 +617,7 @@ $('#ask').onclick = async () => {
       return;
     }
 
-    // 3. Critères thématiques (ex: "film francais annees 2000", "horreur coréenne")
+    // Cas 4 : Critères thématiques (ex: "film francais annees 2000", "horreur coréenne")
     const params = {
       year_gte: parsed.year_gte,
       year_lte: parsed.year_lte,
@@ -604,12 +648,15 @@ const rnd = (a, k) => [...a].sort(() => Math.random() - .5).slice(0, k);
 async function loadLLMSuggestions() {
   if (!hasKeys()) return;
   const sampleSeen = rnd(Object.values(S.seen), 30).map(f => `${f.o} (${f.y})`).join(', ');
-  const prompt = `Films vus : ${sampleSeen || 'Aucun'}. Propose 8 suggestions variées : 3 réalisateurs, 2 acteurs stars, 3 filtres précis (pays, décennie, genre).`;
+  const prompt = `Films vus : ${sampleSeen || 'Aucun'}. Propose 8 suggestions captivantes :
+- 2 sagas célèbres (ex: James Bond, Star Wars, Le Parrain, Mad Max)
+- 3 réalisateurs incontournables
+- 3 filtres précis (pays, décennie, genre)`;
 
   const system = `Réponds UNIQUEMENT par JSON d'objets :
-- type : "director"|"actor"|"filter"
-- name : nom de la personne
-- label : titre court
+- type : "collection"|"director"|"actor"|"filter"
+- name : nom de la franchise ou personne
+- label : titre court (ex: "Saga James Bond (007)", "Christopher Nolan", "Cinéma Français 2000s")
 - desc : description
 - genres : tableau parmi [action, aventure, animation, comédie, crime, documentaire, drame, famille, fantastique, histoire, horreur, musique, mystère, romance, science-fiction, thriller, guerre, western]
 - country : code pays ISO (US, FR, KR, JP, IT, GB, etc.)
@@ -644,14 +691,29 @@ async function selectFacet(facet, cardEl) {
   switchToExplore();
   record();
 
+  if (facet.type === 'collection') {
+    let col = await searchCollection(facet.name);
+    const colId = col ? col.id : (/007|bond/i.test(facet.name) ? 645 : null);
+    if (colId) {
+      const movies = await fetchCollectionMovies(colId);
+      browseState = {
+        mode: 'buffer',
+        label: facet.label,
+        buffer: movies
+      };
+      fetchNextBatch();
+      return;
+    }
+  }
+
   if (facet.type === 'director' || facet.type === 'actor') {
     const person = await searchPerson(facet.name);
     if (!person) return alert(`Introuvable sur TMDB : ${facet.name}`);
     const credits = await fetchPersonCredits(person.id, facet.type);
     browseState = {
-      mode: 'person',
+      mode: 'buffer',
       label: facet.label,
-      personBuffer: credits
+      buffer: credits
     };
   } else {
     const params = {
@@ -893,7 +955,7 @@ $('#btn-reset-all').onclick = () => {
   if (confirm('Effacer toutes les données locales ?')) {
     S = { seen: {}, unseen: {}, watch: {} };
     grid = [];
-    browseState = { mode: 'general', page: 1, label: 'Grille générale', discoverParams: null, personBuffer: [] };
+    browseState = { mode: 'general', page: 1, label: 'Grille générale', discoverParams: null, buffer: [] };
     save();
     closeKeyModal();
     renderGrid();
