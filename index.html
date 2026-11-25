@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Films vus · Letterboxd Picker</title>
 <style>
-:root{--bg:#14181c;--bar:#1c2228;--panel:#1a2026;--tx:#e4e8eb;--mu:#8a96a0;--ok:#40bcf4;--ac:#ff8000;--bd:#2c3640;--bad:#ff4d4d}
+:root{--bg:#14181c;--bar:#1c2228;--panel:#1a2026;--tx:#e4e8eb;--mu:#8a96a0;--ok:#40bcf4;--ac:#ff8000;--bd:#2c3640;--bad:#ff4d4d;--green:#00e054}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 system-ui,-apple-system,sans-serif;-webkit-tap-highlight-color:transparent}
 header{position:sticky;top:0;z-index:30;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:var(--bar);border-bottom:1px solid var(--bd)}
@@ -13,6 +13,8 @@ header b{font-size:13px;white-space:nowrap}
 #hint{flex:1;min-width:180px;padding:7px 10px;border-radius:4px;border:1px solid #3a4651;background:var(--bg);color:var(--tx)}
 button{padding:7px 11px;border:0;border-radius:4px;background:#2c3640;color:var(--tx);font:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-size:13px}
 button:hover{background:#3a4651}
+#btn-validate{background:var(--green);color:#111;font-weight:700}
+#btn-validate:disabled{opacity:.5;cursor:wait}
 #next{background:var(--ac);color:#111;font-weight:600}
 #next:disabled{opacity:.5;cursor:wait}
 .nav-tab{background:transparent;border:1px solid var(--bd)}
@@ -46,6 +48,8 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
 .c.w img{opacity:.55}
 .c.w .wl{background:var(--ac);color:#111;font-weight:700}
 .c.sel .wl{display:none}
+
+.badge-unseen{position:absolute;top:6px;left:6px;padding:2px 6px;font-size:10px;background:#ff4d4d88;border-radius:3px;color:#fff;pointer-events:none}
 
 .btn-info{position:absolute;bottom:6px;right:6px;background:#0009;border:0;color:#fff;border-radius:50%;width:24px;height:24px;padding:0;font-size:12px;display:flex;align-items:center;justify-content:center;z-index:5}
 .btn-info:hover{background:var(--ok);color:#111}
@@ -93,7 +97,11 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
   <button id="tab-explore" class="nav-tab active">Explorer</button>
   <button id="tab-seen" class="nav-tab"><span id="n">0</span> vus</button>
   <button id="tab-watch" class="nav-tab"><span id="w">0</span> à voir</button>
-  <button id="next">Grille suivante</button>
+  <button id="tab-unseen" class="nav-tab"><span id="u">0</span> non vus</button>
+  
+  <button id="btn-validate" title="Enregistre la sélection et marque le reste de la grille en non vu">✓ Valider la sélection</button>
+  <button id="next" title="Passe à la grille suivante sans marquer les films non cochés">Passer ➔</button>
+
   <input id="hint" placeholder="« 007 », « César meilleur film », « David Fincher »…">
   <button id="ask" style="background:#2c5f7a">Chercher</button>
   <button id="all">Tout cocher</button>
@@ -114,7 +122,7 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
       </div>
     </h3>
     <div style="font-size:11px;color:var(--mu)">
-      Filtres d'exploration TMDB précis et sans devinettes.
+      Filtres d'exploration TMDB précis et exhaustifs.
     </div>
     <div class="pill-list" id="suggestions-container">
       <div style="color:var(--mu);font-size:12px">Chargement...</div>
@@ -146,7 +154,7 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
           <option value="year-asc">Année (ancien → récent)</option>
           <option value="alpha">Titre (A → Z)</option>
         </select>
-        <button id="btn-export-current-tab" style="padding:6px 10px;font-size:12px;background:#253746">📥 Exporter cette liste CSV</button>
+        <button id="btn-export-current-tab" style="padding:6px 10px;font-size:12px;background:#253746">📥 Exporter CSV</button>
       </div>
       <div class="list-grid" id="list-cards"></div>
     </div>
@@ -267,6 +275,7 @@ const save = () => {
   localStorage.lb_state = JSON.stringify(S);
   $('#n').textContent = Object.keys(S.seen).length;
   $('#w').textContent = Object.keys(S.watch).length;
+  $('#u').textContent = Object.keys(S.unseen).length;
 };
 
 // ----------------- SIDEBAR MOBILE -----------------
@@ -321,7 +330,7 @@ async function pushToGist() {
     openKeyModal();
     return alert('Renseigne ton Gist ID et ton Token GitHub dans les réglages (⚙️).');
   }
-  record();
+  recordSelectionOnly();
   $('#perf').textContent = '☁️ Sauvegarde Gist en cours...';
   try {
     const res = await fetch(`https://api.github.com/gists/${keys.gistId}`, {
@@ -364,7 +373,7 @@ async function pullFromGist() {
       save();
       if (currentView === 'explore') renderGrid();
       else renderListView();
-      $('#perf').textContent = `☁️ Données Gist chargées : ${Object.keys(S.seen).length} vus, ${Object.keys(S.watch).length} à voir.`;
+      $('#perf').textContent = `☁️ Données Gist chargées : ${Object.keys(S.seen).length} vus, ${Object.keys(S.watch).length} à voir, ${Object.keys(S.unseen).length} non vus.`;
     }
   } catch(e) {
     alert('Erreur chargement Gist : ' + e.message);
@@ -538,27 +547,33 @@ async function fetchDiscoverBatch(params, targetCount) {
 async function fetchNextBatch() {
   if (!hasKeys()) return;
   switchToExplore();
-  record();
 
   const count = computeScreenBatchSize();
   $('#msg').textContent = `Chargement (${browseState.label})...`;
 
   let out = [];
-  const known = id => S.seen[id] || S.unseen[id] || S.watch[id];
 
   if (browseState.mode === 'buffer') {
+    // Dans le mode buffer complet (sagas, réalisateurs, etc.) : on affiche TOUT par paquet sans cacher les déjà vus
     while (browseState.buffer.length && out.length < count) {
       const f = browseState.buffer.shift();
-      if (!known(f.id) && !out.some(o => o.id === f.id)) out.push(f);
+      if (!out.some(o => o.id === f.id)) out.push(f);
     }
   } else {
     out = await fetchDiscoverBatch(browseState.discoverParams, count);
   }
 
+  // Pré-cocher selon l'état actuel pour assurer une exhaustivité 100% visible
+  out.forEach(f => {
+    f.sel = !!S.seen[f.id];
+    f.wl = !!S.watch[f.id];
+    f.isUnseen = !!S.unseen[f.id];
+  });
+
   grid = out;
   renderGrid();
   $('#perf').textContent = `${browseState.label} · ${grid.length} affiches affichées`;
-  $('#msg').textContent = grid.length ? '' : 'Plus aucun film à classer pour ce filtre !';
+  $('#msg').textContent = grid.length ? '' : 'Plus aucun film à afficher pour ce filtre !';
   scrollTo(0, 0);
 }
 
@@ -595,7 +610,6 @@ $('#ask').onclick = async () => {
   const query = $('#hint').value.trim();
   if (!query || !hasKeys()) return;
   switchToExplore();
-  record();
   $('#msg').textContent = `🧠 Analyse de l'intention pour "${query}"...`;
 
   try {
@@ -618,7 +632,9 @@ $('#ask').onclick = async () => {
         const candidateSummary = candidates.map(f => ({ id: f.id, titre: f.t, annee: f.y }));
         const validIds = await callGemini(
           FILTER_SYSTEM,
-          `Demande utilisateur : "${query}"\nFilms à vérifier :\n${JSON.stringify(candidateSummary)}`,
+          `Demande utilisateur : "${query}"
+Films à vérifier :
+${JSON.stringify(candidateSummary)}`,
           0.1
         );
         if (Array.isArray(validIds) && validIds.length) {
@@ -631,7 +647,7 @@ $('#ask').onclick = async () => {
 
       browseState = {
         mode: 'buffer',
-        label: `${plan.label} (${finalFilms.length} films)`,
+        label: `${plan.label} (${finalFilms.length} films au total)`,
         buffer: finalFilms
       };
       fetchNextBatch();
@@ -645,7 +661,7 @@ $('#ask').onclick = async () => {
         const credits = await fetchPersonCredits(person.id, isDir ? 'director' : 'actor');
         browseState = {
           mode: 'buffer',
-          label: `${person.name} (${isDir ? 'Réalisateur' : 'Acteur'}) · ${credits.length} films`,
+          label: `${person.name} (${isDir ? 'Réalisateur' : 'Acteur'}) · ${credits.length} films au total`,
           buffer: credits
         };
         fetchNextBatch();
@@ -676,7 +692,7 @@ $('#ask').onclick = async () => {
   }
 };
 
-// ----------------- SUGGESTIONS CIBLÉES (NOMS CLAIRS SANS ÉNIGMES) -----------------
+// ----------------- SUGGESTIONS CIBLÉES -----------------
 
 const rnd = (a, k) => [...a].sort(() => Math.random() - .5).slice(0, k);
 
@@ -732,7 +748,6 @@ async function selectFacet(facet, cardEl) {
   if (cardEl) cardEl.classList.add('active');
   
   switchToExplore();
-  record();
 
   if (facet.type === 'director' || facet.type === 'actor') {
     const person = await searchPerson(facet.name);
@@ -740,7 +755,7 @@ async function selectFacet(facet, cardEl) {
     const credits = await fetchPersonCredits(person.id, facet.type);
     browseState = {
       mode: 'buffer',
-      label: facet.label,
+      label: `${facet.label} · ${credits.length} films au total`,
       buffer: credits
     };
   } else {
@@ -764,11 +779,15 @@ async function selectFacet(facet, cardEl) {
   fetchNextBatch();
 }
 
-// ----------------- VUES LISTES (VUS / WATCHLIST) -----------------
+// ----------------- VUES LISTES (VUS / WATCHLIST / NON VUS) -----------------
 
 function renderListView() {
-  const isSeen = currentView === 'seen';
-  const source = isSeen ? S.seen : S.watch;
+  let source;
+  let title;
+  if (currentView === 'seen') { source = S.seen; title = 'Films vus'; }
+  else if (currentView === 'watch') { source = S.watch; title = 'Watchlist'; }
+  else { source = S.unseen; title = 'Films non vus'; }
+
   const listCards = $('#list-cards');
   listCards.innerHTML = '';
 
@@ -792,11 +811,34 @@ function renderListView() {
     return (b.addedAt || 0) - (a.addedAt || 0);
   });
 
-  $('#perf').textContent = `${isSeen ? 'Films vus' : 'Watchlist'} : ${items.length} film(s) affiché(s) sur ${Object.keys(source).length}`;
+  $('#perf').textContent = `${title} : ${items.length} film(s) affiché(s) sur ${Object.keys(source).length}`;
 
   items.forEach(f => {
     const card = document.createElement('div');
     card.className = 'list-item';
+    
+    let actionButtons = '';
+    if (currentView === 'seen') {
+      actionButtons = `
+        <button class="btn-to-watch">→ À voir</button>
+        <button class="btn-to-unseen" style="background:#5a2323">→ Non vu</button>
+        <button class="btn-del" style="background:var(--bad);color:#fff">✕</button>
+      `;
+    } else if (currentView === 'watch') {
+      actionButtons = `
+        <button class="btn-to-seen">→ Vu</button>
+        <button class="btn-to-unseen" style="background:#5a2323">→ Non vu</button>
+        <button class="btn-del" style="background:var(--bad);color:#fff">✕</button>
+      `;
+    } else {
+      // Non vus
+      actionButtons = `
+        <button class="btn-to-seen" style="background:#234458">→ Vu</button>
+        <button class="btn-to-watch" style="background:#583a23">→ À voir</button>
+        <button class="btn-del" style="background:var(--bad);color:#fff" title="Oublier pour qu'il soit reproposé">Oublier</button>
+      `;
+    }
+
     card.innerHTML = `
       <img id="img-${f.id}" src="${getPosterSrc(f)}" alt="" loading="lazy">
       <div class="list-item-body">
@@ -805,30 +847,38 @@ function renderListView() {
           <div class="list-item-sub">${f.o !== f.t ? f.o + ' · ' : ''}${f.y}</div>
         </div>
         <div class="list-item-actions">
-          <button class="btn-swap">${isSeen ? '→ À voir' : '→ Vu'}</button>
-          <button class="btn-del" style="background:var(--bad);color:#fff">✕</button>
+          ${actionButtons}
         </div>
       </div>
     `;
 
     card.querySelector('img').onclick = () => showMovieDetails(f.id);
 
-    card.querySelector('.btn-swap').onclick = () => {
-      if (isSeen) {
-        delete S.seen[f.id];
-        S.watch[f.id] = { ...f, addedAt: Date.now() };
-      } else {
-        delete S.watch[f.id];
-        S.seen[f.id] = { ...f, addedAt: Date.now() };
-      }
-      save();
-      renderListView();
+    const btnSeen = card.querySelector('.btn-to-seen');
+    if (btnSeen) btnSeen.onclick = () => {
+      delete S.watch[f.id]; delete S.unseen[f.id];
+      S.seen[f.id] = { ...f, addedAt: Date.now() };
+      save(); renderListView();
     };
 
-    card.querySelector('.btn-del').onclick = () => {
-      delete (isSeen ? S.seen : S.watch)[f.id];
-      save();
-      renderListView();
+    const btnWatch = card.querySelector('.btn-to-watch');
+    if (btnWatch) btnWatch.onclick = () => {
+      delete S.seen[f.id]; delete S.unseen[f.id];
+      S.watch[f.id] = { ...f, addedAt: Date.now() };
+      save(); renderListView();
+    };
+
+    const btnUnseen = card.querySelector('.btn-to-unseen');
+    if (btnUnseen) btnUnseen.onclick = () => {
+      delete S.seen[f.id]; delete S.watch[f.id];
+      S.unseen[f.id] = { ...f, addedAt: Date.now() };
+      save(); renderListView();
+    };
+
+    const btnDel = card.querySelector('.btn-del');
+    if (btnDel) btnDel.onclick = () => {
+      delete S.seen[f.id]; delete S.watch[f.id]; delete S.unseen[f.id];
+      save(); renderListView();
     };
 
     listCards.appendChild(card);
@@ -844,11 +894,12 @@ function switchToExplore() {
 }
 
 function switchToTab(view) {
-  record();
+  recordSelectionOnly();
   currentView = view;
   $('.nav-tab.active')?.classList.remove('active');
   if (view === 'seen') $('#tab-seen').classList.add('active');
   if (view === 'watch') $('#tab-watch').classList.add('active');
+  if (view === 'unseen') $('#tab-unseen').classList.add('active');
 
   $('#grid').style.display = 'none';
   $('#list-view').style.display = 'flex';
@@ -858,6 +909,7 @@ function switchToTab(view) {
 $('#tab-explore').onclick = switchToExplore;
 $('#tab-seen').onclick = () => switchToTab('seen');
 $('#tab-watch').onclick = () => switchToTab('watch');
+$('#tab-unseen').onclick = () => switchToTab('unseen');
 $('#list-search').oninput = renderListView;
 $('#list-decade').onchange = renderListView;
 $('#list-sort').onchange = renderListView;
@@ -868,26 +920,59 @@ function renderGrid() {
   $('#grid').innerHTML = '';
   grid.forEach(f => {
     const d = document.createElement('div');
-    const paint = () => { d.className = 'c' + (f.sel ? ' sel' : '') + (f.wl ? ' w' : '') };
+    const paint = () => { 
+      d.className = 'c' + (f.sel ? ' sel' : '') + (f.wl ? ' w' : '');
+    };
     d.innerHTML = `
       <img id="img-${f.id}" src="${getPosterSrc(f)}" alt="" loading="lazy">
       <span>${f.t} (${f.y})</span>
       <button class="wl">＋ à voir</button>
+      ${f.isUnseen && !f.sel && !f.wl ? '<div class="badge-unseen">Non vu</div>' : ''}
       <button class="btn-info" title="Détails du film">ℹ</button>
     `;
     paint();
-    d.onclick = () => { f.sel = !f.sel; if (f.sel) f.wl = false; paint(); };
-    d.querySelector('.wl').onclick = e => { e.stopPropagation(); f.wl = !f.wl; if (f.wl) f.sel = false; paint(); };
-    d.querySelector('.btn-info').onclick = e => { e.stopPropagation(); showMovieDetails(f.id); };
+    d.onclick = () => { 
+      f.sel = !f.sel; 
+      if (f.sel) f.wl = false; 
+      f.isUnseen = false;
+      paint(); 
+    };
+    d.querySelector('.wl').onclick = e => { 
+      e.stopPropagation(); 
+      f.wl = !f.wl; 
+      if (f.wl) f.sel = false; 
+      f.isUnseen = false;
+      paint(); 
+    };
+    d.querySelector('.btn-info').onclick = e => { 
+      e.stopPropagation(); 
+      showMovieDetails(f.id); 
+    };
     $('#grid').append(d);
   });
 }
 
-function record() {
+// Enregistre uniquement ce qui a été explicitement coché (ne marque JAMAIS en non vu)
+function recordSelectionOnly() {
+  const now = Date.now();
+  grid.forEach(f => {
+    if (f.sel) {
+      delete S.watch[f.id]; delete S.unseen[f.id];
+      S.seen[f.id] = { id: f.id, t: f.t, o: f.o, y: f.y, p: f.p, addedAt: now };
+    } else if (f.wl) {
+      delete S.seen[f.id]; delete S.unseen[f.id];
+      S.watch[f.id] = { id: f.id, t: f.t, o: f.o, y: f.y, p: f.p, addedAt: now };
+    }
+  });
+  save();
+}
+
+// Validation explicite : les cochés sont vus / à voir, TOUT le reste est marqué NON VU
+function recordFullValidation() {
   const now = Date.now();
   grid.forEach(f => {
     const o = { id: f.id, t: f.t, o: f.o, y: f.y, p: f.p, addedAt: now };
-    delete S.seen[f.id]; delete S.unseen[f.id]; delete S.watch[f.id];
+    delete S.seen[f.id]; delete S.watch[f.id]; delete S.unseen[f.id];
     if (f.sel) S.seen[f.id] = o;
     else if (f.wl) S.watch[f.id] = o;
     else S.unseen[f.id] = o;
@@ -895,13 +980,25 @@ function record() {
   save();
 }
 
+// Clic sur "Valider la sélection" : valide et enchaîne sur la suite
+$('#btn-validate').onclick = async () => {
+  recordFullValidation();
+  $('#perf').textContent = `✓ Grille validée avec succès.`;
+  await fetchNextBatch();
+};
+
+// Clic sur "Passer" : enregistre uniquement ce que tu as coché, ne brûle rien d'autre
+$('#next').onclick = async () => {
+  recordSelectionOnly();
+  await fetchNextBatch();
+};
+
 $('#hint').onkeydown = e => { if (e.key === 'Enter') $('#ask').click(); };
 $('#gen-facets').onclick = loadLLMSuggestions;
-$('#next').onclick = fetchNextBatch;
 
 $('#all').onclick = () => {
   const on = !grid.every(f => f.sel);
-  grid.forEach(f => { f.sel = on; if (on) f.wl = false; });
+  grid.forEach(f => { f.sel = on; if (on) f.wl = false; f.isUnseen = false; });
   renderGrid();
 };
 
@@ -916,19 +1013,24 @@ const dl = (name, text, type) => {
 const exportCsvMap = (map, filename) => {
   const rows = Object.values(map).map(f => `${f.id},"${(f.o || f.t).replace(/"/g, '""')}",${f.y}`);
   if (!rows.length) return alert('Aucun film à exporter pour cette liste.');
-  dl(filename, 'tmdbID,Title,Year\n' + rows.join('\n'), 'text/csv');
+  dl(filename, 'tmdbID,Title,Year
+' + rows.join('
+'), 'text/csv');
 };
 
-$('#btn-export-csv').onclick = () => { record(); exportCsvMap(S.seen, 'letterboxd-vus.csv'); };
-$('#btn-export-wcsv').onclick = () => { record(); exportCsvMap(S.watch, 'letterboxd-watchlist.csv'); };
+$('#btn-export-csv').onclick = () => { recordSelectionOnly(); exportCsvMap(S.seen, 'letterboxd-vus.csv'); };
+$('#btn-export-wcsv').onclick = () => { recordSelectionOnly(); exportCsvMap(S.watch, 'letterboxd-watchlist.csv'); };
 $('#btn-export-current-tab').onclick = () => {
-  record();
-  const isSeen = currentView === 'seen';
-  exportCsvMap(isSeen ? S.seen : S.watch, isSeen ? 'letterboxd-vus.csv' : 'letterboxd-watchlist.csv');
+  recordSelectionOnly();
+  let map = S.seen;
+  let filename = 'letterboxd-vus.csv';
+  if (currentView === 'watch') { map = S.watch; filename = 'letterboxd-watchlist.csv'; }
+  else if (currentView === 'unseen') { map = S.unseen; filename = 'letterboxd-non-vus.csv'; }
+  exportCsvMap(map, filename);
 };
 
 $('#btn-export-json').onclick = () => {
-  record();
+  recordSelectionOnly();
   dl('session-films.json', JSON.stringify(S), 'application/json');
 };
 
@@ -953,11 +1055,10 @@ $('#file-input').onchange = async e => {
         }
       });
     }
-    Object.keys(S.seen).concat(Object.keys(S.watch)).forEach(id => delete S.unseen[id]);
     save();
     closeKeyModal();
     renderGrid();
-    alert(`Import réussi : ${Object.keys(S.seen).length} vus et ${Object.keys(S.watch).length} à voir.`);
+    alert(`Import réussi : ${Object.keys(S.seen).length} vus, ${Object.keys(S.watch).length} à voir, ${Object.keys(S.unseen).length} non vus.`);
   } catch(err) {
     alert('Fichier non valide.');
   }
