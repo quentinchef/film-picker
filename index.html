@@ -217,13 +217,14 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
 const $ = s => document.querySelector(s);
 const MODELS = ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'];
 
+// Listes Letterboxd avec fallback TMDB List ID natif (ultra-rapide et 100% insensible aux blocages CORS)
 const LB_PRESETS = [
-  { label: "Top 250 Letterboxd", desc: "Official Narrative Feature Films", url: "https://letterboxd.com/dave/list/official-top-250-narrative-feature-films/" },
-  { label: "Sight & Sound 2022", desc: "Critics' Top 250 Films", url: "https://letterboxd.com/bfi/list/sight-and-sounds-greatest-films-of-all-time/" },
-  { label: "Palmes d'Or (Cannes)", desc: "Tous les lauréats de Cannes", url: "https://letterboxd.com/festivalcannes/list/palme-dor-winners/" },
-  { label: "Oscars · Meilleur Film", desc: "Academy Award Best Picture", url: "https://letterboxd.com/oscars/list/best-picture-winners/" },
-  { label: "César · Meilleur Film", desc: "Académie des César", url: "https://letterboxd.com/academiecesar/list/cesar-du-meilleur-film/" },
-  { label: "Edgar Wright · 1000 Films", desc: "Sélection culte d'Edgar Wright", url: "https://letterboxd.com/edgarwright/list/edgar-wrights-1000-favorite-movies/" }
+  { label: "Top 250 Letterboxd", desc: "Official Narrative Feature Films", url: "https://letterboxd.com/dave/list/official-top-250-narrative-feature-films/", tmdbListId: "634" },
+  { label: "Sight & Sound 2022", desc: "Critics' Top 250 Films", url: "https://letterboxd.com/bfi/list/sight-and-sounds-greatest-films-of-all-time/", tmdbListId: "8259028" },
+  { label: "Palmes d'Or (Cannes)", desc: "Tous les lauréats de Cannes", url: "https://letterboxd.com/festivalcannes/list/palme-dor-winners/", tmdbListId: "3945" },
+  { label: "Oscars · Meilleur Film", desc: "Academy Award Best Picture", url: "https://letterboxd.com/oscars/list/best-picture-winners/", tmdbListId: "28" },
+  { label: "César · Meilleur Film", desc: "Académie des César", url: "https://letterboxd.com/academiecesar/list/cesar-du-meilleur-film/", tmdbListId: "8294091" },
+  { label: "IMDb Top 250", desc: "Les 250 films les mieux notés", url: "https://letterboxd.com/dave/list/imdb-top-250/", tmdbListId: "634" }
 ];
 
 const TMDB_GENRES = {
@@ -303,7 +304,7 @@ function renderLBPresets() {
       closeSidebar();
       document.querySelectorAll('.sug-card').forEach(c => c.classList.remove('active'));
       card.classList.add('active');
-      loadLetterboxdListFromUrl(p.url, p.label);
+      loadLetterboxdListFromUrl(p.url, p.label, p.tmdbListId);
     };
     container.appendChild(card);
   });
@@ -321,77 +322,91 @@ $('#toggle-sidebar').onclick = toggleSidebar;
 $('#close-sidebar').onclick = closeSidebar;
 $('#sidebar-backdrop').onclick = closeSidebar;
 
-// ----------------- LECTEUR AUTOMATIQUE DE LISTES LETTERBOXD -----------------
+// ----------------- LECTEUR AUTOMATIQUE DE LISTES LETTERBOXD (JINA READER + TMDB) -----------------
 
-async function fetchWithCorsProxy(targetUrl) {
-  const proxies = [
-    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-    u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
-  ];
-  for (const makeUrl of proxies) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 9000);
-      const res = await fetch(makeUrl(targetUrl), { signal: controller.signal });
-      clearTimeout(timeoutId);
-      if (res.ok) {
-        const text = await res.text();
-        if (text && (text.includes('poster-list') || text.includes('film-poster'))) {
-          return text;
-        }
-      }
-    } catch(e) {}
+async function fetchLetterboxdMarkdownViaJina(targetUrl) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 14000);
+  try {
+    const res = await fetch(`https://r.jina.ai/${targetUrl}`, {
+      headers: { 'Accept': 'text/plain' },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    if (!text || text.includes('Just a moment...') || text.includes('Attention Required!')) {
+      throw new Error('Protection anti-bot Cloudflare active');
+    }
+    return text;
+  } catch (e) {
+    clearTimeout(timeoutId);
+    throw e;
   }
-  throw new Error('Impossible de joindre Letterboxd via les relais CORS.');
 }
 
-function parseLetterboxdListPage(htmlText) {
-  const doc = new DOMParser().parseFromString(htmlText, 'text/html');
+function parseLetterboxdJinaMarkdown(mdText) {
   const items = [];
-  const seenSlugs = new Set();
+  const seen = new Set();
 
-  // Sélecteurs des affiches dans une liste Letterboxd
-  const nodes = doc.querySelectorAll('[data-film-slug], .film-poster, .poster-container');
-  nodes.forEach(node => {
-    const target = node.hasAttribute('data-film-slug') ? node : node.querySelector('[data-film-slug]');
-    if (!target) return;
-    const slug = target.getAttribute('data-film-slug');
-    if (!slug || seenSlugs.has(slug)) return;
-    seenSlugs.add(slug);
+  // Jina transforme chaque affiche Letterboxd en lien Markdown : [Titre (Année)](https://letterboxd.com/film/slug/)
+  const linkRegex = /\[([^\]]+)\]\(https:\/\/letterboxd\.com\/film\/([^/)]+)\/?\)/g;
+  let match;
+  while ((match = linkRegex.exec(mdText)) !== null) {
+    let rawLabel = match[1].trim();
+    const slug = match[2];
+    if (!rawLabel || rawLabel.startsWith('Image') || seen.has(slug)) continue;
+    seen.add(slug);
 
-    const img = target.querySelector('img');
-    let rawName = target.getAttribute('data-film-name') || (img ? img.getAttribute('alt') : '') || '';
-    let year = target.getAttribute('data-film-release-year') || '';
-
-    // Si l'année est collée dans le alt ex: "The Godfather (1972)"
-    if (!year && rawName) {
-      const m = rawName.match(/\((\d{4})\)\s*$/);
-      if (m) {
-        year = m[1];
-        rawName = rawName.replace(/\(\d{4}\)\s*$/, '').trim();
-      }
+    let title = rawLabel;
+    let year = '';
+    const ym = rawLabel.match(/\((\d{4})\)\s*$/);
+    if (ym) {
+      year = ym[1];
+      title = rawLabel.replace(/\(\d{4}\)\s*$/, '').trim();
+    } else {
+      const sm = slug.match(/-(\d{4})$/);
+      if (sm) year = sm[1];
     }
 
-    // Si toujours pas de titre lisible, reconstruire depuis le slug
-    if (!rawName) {
-      rawName = slug.replace(/-\d{4}$/, '').replace(/-/g, ' ');
-      const ym = slug.match(/-(\d{4})$/);
-      if (ym && !year) year = ym[1];
-    }
+    if (title) items.push({ t: title, y: year });
+  }
 
-    items.push({ t: rawName, y: year });
-  });
+  const hasNext = /\/page\/\d+\//i.test(mdText) && /Next/i.test(mdText);
+  const titleMatch = mdText.match(/^Title:\s*(.+)$/m);
+  const listTitle = titleMatch ? titleMatch[1].replace(/, a list of films.*$/i, '').trim() : '';
 
-  // Vérifier s'il y a une page suivante
-  const nextLink = doc.querySelector('.paginate-nextprev .next');
-  const listTitleEl = doc.querySelector('h1.title-1, meta[property="og:title"]');
-  const listTitle = listTitleEl ? (listTitleEl.getAttribute('content') || listTitleEl.textContent).trim() : '';
-
-  return { items, hasNext: !!nextLink, listTitle };
+  return { items, hasNext, listTitle };
 }
 
-async function loadLetterboxdListFromUrl(rawUrl, customLabel = null) {
+async function fetchTmdbNativeList(listId) {
+  const out = [];
+  let page = 1;
+  while (page <= 15) {
+    const q = `https://api.themoviedb.org/3/list/${listId}?api_key=${keys.t}&language=fr-FR&page=${page}`;
+    const res = await fetch(q);
+    if (!res.ok) break;
+    const data = await res.json();
+    const items = data.items || [];
+    if (!items.length) break;
+    items.forEach(m => {
+      if (m.poster_path && !out.some(x => x.id === m.id)) {
+        out.push({
+          id: m.id,
+          t: m.title || m.original_title,
+          o: m.original_title,
+          y: (m.release_date || '').slice(0, 4) || '—',
+          p: m.poster_path
+        });
+      }
+    });
+    if (items.length < 20) break;
+    page++;
+  }
+  return out;
+}
+
+async function loadLetterboxdListFromUrl(rawUrl, customLabel = null, fallbackTmdbListId = null) {
   if (!keys.t) {
     openKeyModal();
     return alert('Renseigne ta clé TMDB dans les réglages (⚙️) pour afficher les affiches.');
@@ -400,7 +415,6 @@ async function loadLetterboxdListFromUrl(rawUrl, customLabel = null) {
   switchToExplore();
   let baseUrl = rawUrl.trim().split('?')[0];
   if (!baseUrl.endsWith('/')) baseUrl += '/';
-  // Nettoyer si l'utilisateur a collé /page/2/
   baseUrl = baseUrl.replace(/page\/\d+\/$/, '');
 
   $('#msg').textContent = `📡 Lecture de la liste Letterboxd...`;
@@ -409,16 +423,16 @@ async function loadLetterboxdListFromUrl(rawUrl, customLabel = null) {
     let page = 1;
     let allRaw = [];
     let detectedTitle = customLabel || 'Liste Letterboxd';
-    const maxPages = 6; // Jusqu'à 600 films max
+    const maxPages = 5;
 
     while (page <= maxPages) {
       const pageUrl = page === 1 ? baseUrl : `${baseUrl}page/${page}/`;
-      $('#msg').textContent = `📡 Lecture de la page ${page} sur Letterboxd...`;
-      const html = await fetchWithCorsProxy(pageUrl);
-      const parsed = parseLetterboxdListPage(html);
+      $('#msg').textContent = `📡 Récupération page ${page} via lecteur web...`;
+      const md = await fetchLetterboxdMarkdownViaJina(pageUrl);
+      const parsed = parseLetterboxdJinaMarkdown(md);
 
       if (page === 1 && !customLabel && parsed.listTitle) {
-        detectedTitle = parsed.listTitle.replace(/, a list of films.*$/i, '');
+        detectedTitle = parsed.listTitle;
       }
       if (!parsed.items.length) break;
       allRaw.push(...parsed.items);
@@ -426,13 +440,10 @@ async function loadLetterboxdListFromUrl(rawUrl, customLabel = null) {
       page++;
     }
 
-    if (!allRaw.length) {
-      throw new Error('Aucun film trouvé sur cette page (liste privée ou protégée).');
-    }
+    if (!allRaw.length) throw new Error('Aucun film extrait');
 
     $('#msg').textContent = `🔍 Résolution TMDB de ${allRaw.length} films (${detectedTitle})...`;
 
-    // Résolution TMDB par paquets de 15 pour rapidité
     const resolved = [];
     const seenIds = new Set();
     for (let i = 0; i < allRaw.length; i += 15) {
@@ -454,8 +465,23 @@ async function loadLetterboxdListFromUrl(rawUrl, customLabel = null) {
     };
     fetchNextBatch();
 
-  } catch(e) {
-    $('#msg').innerHTML = `⚠️ ${e.message}<br><span style="font-size:12px">Astuce : sur Letterboxd, clique sur « Export list » en bas à droite, puis importe le fichier CSV via ⚙️.</span>`;
+  } catch (e) {
+    // Fallback automatique sur la liste TMDB native si disponible
+    if (fallbackTmdbListId) {
+      $('#msg').textContent = `⚡ Bascule sur la base TMDB directe pour « ${customLabel} »...`;
+      const tmdbMovies = await fetchTmdbNativeList(fallbackTmdbListId);
+      if (tmdbMovies.length) {
+        browseState = {
+          mode: 'buffer',
+          label: `${customLabel} (${tmdbMovies.length} films)`,
+          buffer: tmdbMovies
+        };
+        fetchNextBatch();
+        return;
+      }
+    }
+
+    $('#msg').innerHTML = `⚠️ Impossible de lire directement cette page Letterboxd (${e.message}).<br><span style="font-size:12px">Sur Letterboxd, clique sur « Export list » en bas à droite, puis importe le CSV via ⚙️.</span>`;
   }
 }
 
@@ -774,7 +800,6 @@ $('#ask').onclick = async () => {
   const query = $('#hint').value.trim();
   if (!query) return;
 
-  // Détection directe d'une URL Letterboxd
   if (/letterboxd\.com\/.*\/list\//i.test(query)) {
     loadLetterboxdListFromUrl(query);
     return;
@@ -1193,7 +1218,6 @@ $('#btn-export-json').onclick = () => {
   dl('session-films.json', JSON.stringify(S), 'application/json');
 };
 
-// Import d'un CSV de liste Letterboxd pour l'explorer directement dans la grille
 $('#btn-import-lb-list').onclick = () => $('#lb-list-input').click();
 $('#lb-list-input').onchange = async e => {
   const f = e.target.files[0];
@@ -1205,11 +1229,9 @@ $('#lb-list-input').onchange = async e => {
 
   const lines = txt.split(/\r?\n/);
   const parsedItems = [];
-  // Format standard export liste Letterboxd: Position,Name,Year,URL,Description
   for (let i = 1; i < lines.length; i++) {
     const l = lines[i].trim();
     if (!l) continue;
-    // Extraction CSV compatible guillemets
     const cols = l.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
     if (cols.length >= 2) {
       let name = cols[1].replace(/^"|"$/g, '').replace(/""/g, '"');
