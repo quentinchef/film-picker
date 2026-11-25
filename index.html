@@ -23,12 +23,13 @@ button:hover{background:#3a4651}
 .layout{display:flex;min-height:calc(100vh - 49px);position:relative}
 aside{width:290px;min-width:260px;background:var(--panel);border-right:1px solid var(--bd);padding:14px;display:flex;flex-direction:column;gap:12px;z-index:40}
 aside h3{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--mu);display:flex;justify-content:space-between;align-items:center}
-.pill-list{display:flex;flex-direction:column;gap:8px;overflow-y:auto;max-height:calc(100vh - 160px)}
+.pill-list{display:flex;flex-direction:column;gap:8px;overflow-y:auto;max-height:calc(100vh - 140px)}
 .sug-card{background:#232b33;border:1px solid #2f3a46;border-radius:6px;padding:8px 10px;cursor:pointer;transition:border-color .15s,background .15s;text-align:left}
 .sug-card:hover{background:#2a343e;border-color:var(--ok)}
 .sug-card b{display:block;color:var(--tx);font-size:13px;margin-bottom:2px}
 .sug-card span{display:block;font-size:11px;color:var(--mu)}
 .sug-card.active{border-color:var(--ac);background:#2c2820}
+.sug-card.lb-preset{border-left:3px solid var(--green)}
 
 #sidebar-backdrop{display:none;position:fixed;top:49px;left:0;right:0;bottom:0;background:#0008;z-index:35}
 
@@ -93,7 +94,7 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
 <body>
 
 <header>
-  <button id="toggle-sidebar">🎯 Suggestions</button>
+  <button id="toggle-sidebar">🎯 Listes & Suggestions</button>
   <button id="tab-explore" class="nav-tab active">Explorer</button>
   <button id="tab-seen" class="nav-tab"><span id="n">0</span> vus</button>
   <button id="tab-watch" class="nav-tab"><span id="w">0</span> à voir</button>
@@ -102,7 +103,7 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
   <button id="btn-validate" title="Enregistre la sélection et marque le reste de la grille en non vu">✓ Valider la sélection</button>
   <button id="next" title="Passe à la grille suivante sans marquer les films non cochés">Passer ➔</button>
 
-  <input id="hint" placeholder="« 007 », « César meilleur film », « David Fincher »…">
+  <input id="hint" placeholder="URL liste Letterboxd, « David Fincher », « 007 »…">
   <button id="ask" style="background:#2c5f7a">Chercher</button>
   <button id="all">Tout cocher</button>
   <button id="sync-push" title="Sauvegarder sur GitHub Gist">☁️ Sauver</button>
@@ -115,15 +116,15 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
 <div class="layout">
   <aside id="sidebar">
     <h3>
-      <span>Suggestions ciblées</span>
-      <div style="display:flex;gap:4px">
-        <button id="gen-facets" style="padding:2px 6px;font-size:11px">↻</button>
-        <button id="close-sidebar" style="padding:2px 6px;font-size:11px">✕</button>
-      </div>
+      <span>Listes Letterboxd</span>
+      <button id="close-sidebar" style="padding:2px 6px;font-size:11px">✕</button>
     </h3>
-    <div style="font-size:11px;color:var(--mu)">
-      Filtres d'exploration TMDB précis et exhaustifs.
-    </div>
+    <div class="pill-list" id="lb-presets-container"></div>
+
+    <h3 style="margin-top:6px">
+      <span>Suggestions IA</span>
+      <button id="gen-facets" style="padding:2px 6px;font-size:11px">↻</button>
+    </h3>
     <div class="pill-list" id="suggestions-container">
       <div style="color:var(--mu);font-size:12px">Chargement...</div>
     </div>
@@ -195,11 +196,13 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
     </div>
 
     <hr style="border:0;border-top:1px solid var(--bd);margin:16px 0">
-    <div style="font-size:12px;color:var(--mu);margin-bottom:8px">Sauvegardes de secours locales :</div>
+    <div style="font-size:12px;color:var(--mu);margin-bottom:8px">Importer un export CSV de liste Letterboxd ou sauvegarde JSON :</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <button id="btn-export-json">Télécharger JSON</button>
-      <button id="btn-import-file">Importer fichier (CSV/JSON)</button>
+      <button id="btn-import-lb-list" style="background:#1e4d33">📂 Charger une liste CSV Letterboxd</button>
+      <button id="btn-import-file">Restaurer sauvegarde (JSON/CSV)</button>
       <input type="file" id="file-input" accept=".json,.csv" style="display:none">
+      <input type="file" id="lb-list-input" accept=".csv" style="display:none">
     </div>
 
     <div class="modal-actions" style="margin-top:20px">
@@ -213,6 +216,15 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:
 <script>
 const $ = s => document.querySelector(s);
 const MODELS = ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'];
+
+const LB_PRESETS = [
+  { label: "Top 250 Letterboxd", desc: "Official Narrative Feature Films", url: "https://letterboxd.com/dave/list/official-top-250-narrative-feature-films/" },
+  { label: "Sight & Sound 2022", desc: "Critics' Top 250 Films", url: "https://letterboxd.com/bfi/list/sight-and-sounds-greatest-films-of-all-time/" },
+  { label: "Palmes d'Or (Cannes)", desc: "Tous les lauréats de Cannes", url: "https://letterboxd.com/festivalcannes/list/palme-dor-winners/" },
+  { label: "Oscars · Meilleur Film", desc: "Academy Award Best Picture", url: "https://letterboxd.com/oscars/list/best-picture-winners/" },
+  { label: "César · Meilleur Film", desc: "Académie des César", url: "https://letterboxd.com/academiecesar/list/cesar-du-meilleur-film/" },
+  { label: "Edgar Wright · 1000 Films", desc: "Sélection culte d'Edgar Wright", url: "https://letterboxd.com/edgarwright/list/edgar-wrights-1000-favorite-movies/" }
+];
 
 const TMDB_GENRES = {
   "action": 28, "aventure": 12, "animation": 16, "comédie": 35, "comedie": 35,
@@ -278,7 +290,24 @@ const save = () => {
   $('#u').textContent = Object.keys(S.unseen).length;
 };
 
-// ----------------- SIDEBAR MOBILE -----------------
+// ----------------- SIDEBAR MOBILE & PRESETS -----------------
+
+function renderLBPresets() {
+  const container = $('#lb-presets-container');
+  container.innerHTML = '';
+  LB_PRESETS.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'sug-card lb-preset';
+    card.innerHTML = `<b>${p.label}</b><span>${p.desc}</span>`;
+    card.onclick = () => {
+      closeSidebar();
+      document.querySelectorAll('.sug-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      loadLetterboxdListFromUrl(p.url, p.label);
+    };
+    container.appendChild(card);
+  });
+}
 
 function closeSidebar() {
   $('#sidebar').classList.remove('open');
@@ -291,6 +320,144 @@ function toggleSidebar() {
 $('#toggle-sidebar').onclick = toggleSidebar;
 $('#close-sidebar').onclick = closeSidebar;
 $('#sidebar-backdrop').onclick = closeSidebar;
+
+// ----------------- LECTEUR AUTOMATIQUE DE LISTES LETTERBOXD -----------------
+
+async function fetchWithCorsProxy(targetUrl) {
+  const proxies = [
+    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+    u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+  ];
+  for (const makeUrl of proxies) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 9000);
+      const res = await fetch(makeUrl(targetUrl), { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const text = await res.text();
+        if (text && (text.includes('poster-list') || text.includes('film-poster'))) {
+          return text;
+        }
+      }
+    } catch(e) {}
+  }
+  throw new Error('Impossible de joindre Letterboxd via les relais CORS.');
+}
+
+function parseLetterboxdListPage(htmlText) {
+  const doc = new DOMParser().parseFromString(htmlText, 'text/html');
+  const items = [];
+  const seenSlugs = new Set();
+
+  // Sélecteurs des affiches dans une liste Letterboxd
+  const nodes = doc.querySelectorAll('[data-film-slug], .film-poster, .poster-container');
+  nodes.forEach(node => {
+    const target = node.hasAttribute('data-film-slug') ? node : node.querySelector('[data-film-slug]');
+    if (!target) return;
+    const slug = target.getAttribute('data-film-slug');
+    if (!slug || seenSlugs.has(slug)) return;
+    seenSlugs.add(slug);
+
+    const img = target.querySelector('img');
+    let rawName = target.getAttribute('data-film-name') || (img ? img.getAttribute('alt') : '') || '';
+    let year = target.getAttribute('data-film-release-year') || '';
+
+    // Si l'année est collée dans le alt ex: "The Godfather (1972)"
+    if (!year && rawName) {
+      const m = rawName.match(/\((\d{4})\)\s*$/);
+      if (m) {
+        year = m[1];
+        rawName = rawName.replace(/\(\d{4}\)\s*$/, '').trim();
+      }
+    }
+
+    // Si toujours pas de titre lisible, reconstruire depuis le slug
+    if (!rawName) {
+      rawName = slug.replace(/-\d{4}$/, '').replace(/-/g, ' ');
+      const ym = slug.match(/-(\d{4})$/);
+      if (ym && !year) year = ym[1];
+    }
+
+    items.push({ t: rawName, y: year });
+  });
+
+  // Vérifier s'il y a une page suivante
+  const nextLink = doc.querySelector('.paginate-nextprev .next');
+  const listTitleEl = doc.querySelector('h1.title-1, meta[property="og:title"]');
+  const listTitle = listTitleEl ? (listTitleEl.getAttribute('content') || listTitleEl.textContent).trim() : '';
+
+  return { items, hasNext: !!nextLink, listTitle };
+}
+
+async function loadLetterboxdListFromUrl(rawUrl, customLabel = null) {
+  if (!keys.t) {
+    openKeyModal();
+    return alert('Renseigne ta clé TMDB dans les réglages (⚙️) pour afficher les affiches.');
+  }
+
+  switchToExplore();
+  let baseUrl = rawUrl.trim().split('?')[0];
+  if (!baseUrl.endsWith('/')) baseUrl += '/';
+  // Nettoyer si l'utilisateur a collé /page/2/
+  baseUrl = baseUrl.replace(/page\/\d+\/$/, '');
+
+  $('#msg').textContent = `📡 Lecture de la liste Letterboxd...`;
+
+  try {
+    let page = 1;
+    let allRaw = [];
+    let detectedTitle = customLabel || 'Liste Letterboxd';
+    const maxPages = 6; // Jusqu'à 600 films max
+
+    while (page <= maxPages) {
+      const pageUrl = page === 1 ? baseUrl : `${baseUrl}page/${page}/`;
+      $('#msg').textContent = `📡 Lecture de la page ${page} sur Letterboxd...`;
+      const html = await fetchWithCorsProxy(pageUrl);
+      const parsed = parseLetterboxdListPage(html);
+
+      if (page === 1 && !customLabel && parsed.listTitle) {
+        detectedTitle = parsed.listTitle.replace(/, a list of films.*$/i, '');
+      }
+      if (!parsed.items.length) break;
+      allRaw.push(...parsed.items);
+      if (!parsed.hasNext) break;
+      page++;
+    }
+
+    if (!allRaw.length) {
+      throw new Error('Aucun film trouvé sur cette page (liste privée ou protégée).');
+    }
+
+    $('#msg').textContent = `🔍 Résolution TMDB de ${allRaw.length} films (${detectedTitle})...`;
+
+    // Résolution TMDB par paquets de 15 pour rapidité
+    const resolved = [];
+    const seenIds = new Set();
+    for (let i = 0; i < allRaw.length; i += 15) {
+      const chunk = allRaw.slice(i, i + 15);
+      const batchRes = await Promise.all(chunk.map(m => resolveMovieOnTMDB(m.t, m.y)));
+      batchRes.forEach(f => {
+        if (f && !seenIds.has(f.id)) {
+          seenIds.add(f.id);
+          resolved.push(f);
+        }
+      });
+      $('#msg').textContent = `🔍 Résolution TMDB : ${Math.min(i + 15, allRaw.length)}/${allRaw.length} films...`;
+    }
+
+    browseState = {
+      mode: 'buffer',
+      label: `${detectedTitle} (${resolved.length} films)`,
+      buffer: resolved
+    };
+    fetchNextBatch();
+
+  } catch(e) {
+    $('#msg').innerHTML = `⚠️ ${e.message}<br><span style="font-size:12px">Astuce : sur Letterboxd, clique sur « Export list » en bas à droite, puis importe le fichier CSV via ⚙️.</span>`;
+  }
+}
 
 // ----------------- MODALE DÉTAILS FILM -----------------
 
@@ -400,16 +567,16 @@ $('#cfg-save').onclick = () => {
   localStorage.lb_keys = JSON.stringify(keys);
   closeKeyModal();
   $('#msg').textContent = 'Réglages enregistrés.';
-  if (keys.a && keys.t && !grid.length) {
-    loadLLMSuggestions();
+  if (keys.t && !grid.length) {
+    if (keys.a) loadLLMSuggestions();
     fetchNextBatch();
   }
 };
 
-function hasKeys() {
-  if (!keys.a || !keys.t) {
+function hasKeys(requireGemini = true) {
+  if (!keys.t || (requireGemini && !keys.a)) {
     openKeyModal();
-    $('#msg').textContent = 'Renseigne tes clés Gemini et TMDB pour continuer.';
+    $('#msg').textContent = 'Renseigne tes clés API pour continuer.';
     return false;
   }
   return true;
@@ -545,7 +712,7 @@ async function fetchDiscoverBatch(params, targetCount) {
 // ----------------- CHARGEMENT DU BATCH SUIVANT -----------------
 
 async function fetchNextBatch() {
-  if (!hasKeys()) return;
+  if (!hasKeys(false)) return;
   switchToExplore();
 
   const count = computeScreenBatchSize();
@@ -554,7 +721,6 @@ async function fetchNextBatch() {
   let out = [];
 
   if (browseState.mode === 'buffer') {
-    // Dans le mode buffer complet (sagas, réalisateurs, etc.) : on affiche TOUT par paquet sans cacher les déjà vus
     while (browseState.buffer.length && out.length < count) {
       const f = browseState.buffer.shift();
       if (!out.some(o => o.id === f.id)) out.push(f);
@@ -563,7 +729,6 @@ async function fetchNextBatch() {
     out = await fetchDiscoverBatch(browseState.discoverParams, count);
   }
 
-  // Pré-cocher selon l'état actuel pour assurer une exhaustivité 100% visible
   out.forEach(f => {
     f.sel = !!S.seen[f.id];
     f.wl = !!S.watch[f.id];
@@ -573,14 +738,14 @@ async function fetchNextBatch() {
   grid = out;
   renderGrid();
   $('#perf').textContent = `${browseState.label} · ${grid.length} affiches affichées`;
-  $('#msg').textContent = grid.length ? '' : 'Plus aucun film à afficher pour ce filtre !';
+  $('#msg').textContent = grid.length ? '' : 'Fin de la liste atteinte !';
   scrollTo(0, 0);
 }
 
-// ----------------- PIPELINE EN AMONT + EN AVAL -----------------
+// ----------------- RECHERCHE INTELLIGENTE & URL LETTERBOXD -----------------
 
 const INTENT_SYSTEM = `Tu es un expert mondial en cinéma et un routeur de recherche cinéphile.
-L'utilisateur formule une demande en langage naturel (ex: "007", "cesar du meilleur film francais de 1980 à aujourd'hui", "films de zombies italiens 70s", "David Fincher", "Star Wars").
+L'utilisateur formule une demande en langage naturel (ex: "007", "cesar du meilleur film francais de 1980 à aujourd'hui", "David Fincher", "Star Wars").
 
 Détermine la meilleure stratégie :
 1. "curated_list" : pour toute demande culturelle fermée, récompenses (César, Oscars, Palme d'or), sagas cinématographiques (007, James Bond, Marvel Phase 1, Alien, Mission Impossible, etc.), adaptations, listes précises.
@@ -591,7 +756,7 @@ Détermine la meilleure stratégie :
 Réponds UNIQUEMENT avec un JSON suivant cette structure :
 {
   "strategy": "curated_list" | "person" | "discover",
-  "label": "Titre clair et précis (ex: 'Saga James Bond (25 films)', 'César du Meilleur Film (1980-présent)', 'David Fincher (Réalisateur)')",
+  "label": "Titre clair et précis",
   "movies": [{"t": "Titre original", "y": 1995}],
   "person_name": "Nom complet de la personne" ou null,
   "person_role": "director" ou "actor",
@@ -602,13 +767,20 @@ Réponds UNIQUEMENT avec un JSON suivant cette structure :
 }`;
 
 const FILTER_SYSTEM = `Tu es un filtre de contrôle qualité cinématographique en aval.
-On te donne une liste de films trouvés pour répondre à la demande de l'utilisateur.
-Élimine les faux positifs, documentaires non pertinents ou homonymes qui ne correspondent PAS à la demande.
+Élimine les faux positifs ou homonymes qui ne correspondent PAS à la demande.
 Renvoie UNIQUEMENT un tableau JSON avec les ID des films validés : [11, 24, 85, ...]`;
 
 $('#ask').onclick = async () => {
   const query = $('#hint').value.trim();
-  if (!query || !hasKeys()) return;
+  if (!query) return;
+
+  // Détection directe d'une URL Letterboxd
+  if (/letterboxd\.com\/.*\/list\//i.test(query)) {
+    loadLetterboxdListFromUrl(query);
+    return;
+  }
+
+  if (!hasKeys(true)) return;
   switchToExplore();
   $('#msg').textContent = `🧠 Analyse de l'intention pour "${query}"...`;
 
@@ -632,9 +804,7 @@ $('#ask').onclick = async () => {
         const candidateSummary = candidates.map(f => ({ id: f.id, titre: f.t, annee: f.y }));
         const validIds = await callGemini(
           FILTER_SYSTEM,
-          `Demande utilisateur : "${query}"
-Films à vérifier :
-${JSON.stringify(candidateSummary)}`,
+          `Demande utilisateur : "${query}"\nFilms à vérifier :\n${JSON.stringify(candidateSummary)}`,
           0.1
         );
         if (Array.isArray(validIds) && validIds.length) {
@@ -692,25 +862,26 @@ ${JSON.stringify(candidateSummary)}`,
   }
 };
 
-// ----------------- SUGGESTIONS CIBLÉES -----------------
+// ----------------- SUGGESTIONS IA -----------------
 
 const rnd = (a, k) => [...a].sort(() => Math.random() - .5).slice(0, k);
 
 async function loadLLMSuggestions() {
-  if (!hasKeys()) return;
+  if (!keys.a || !keys.t) {
+    $('#suggestions-container').innerHTML = '<div style="color:var(--mu);font-size:11px">Clé Gemini requise pour les suggestions IA.</div>';
+    return;
+  }
   const sampleSeen = rnd(Object.values(S.seen), 30).map(f => `${f.o} (${f.y})`).join(', ');
-  const prompt = `Films vus : ${sampleSeen || 'Aucun'}. Propose 8 suggestions cinéphiles de grande qualité :
+  const prompt = `Films vus : ${sampleSeen || 'Aucun'}. Propose 6 suggestions cinéphiles :
 - 3 réalisateurs majeurs
-- 2 grandes sagas
-- 3 filtres thématiques très précis (ex: "Films français des années 90", "Cinéma d'animation japonais", "Thrillers scandinaves").`;
+- 3 filtres thématiques très précis (ex: "Films français des années 90", "Cinéma d'animation japonais").`;
 
-  const system = `Tu es un programmateur de cinéma. RÈGLE STRICTE : Sois limpide, direct et explicite. Ne fais JAMAIS de métaphores ou périphrases mystérieuses (interdit d'écrire "Virtuose du suspense" : écris directement "David Fincher (Réalisateur)").
+  const system = `Tu es un programmateur de cinéma. RÈGLE STRICTE : Sois limpide, direct et explicite. Ne fais JAMAIS de métaphores ou périphrases mystérieuses.
 
 Réponds UNIQUEMENT avec un JSON d'objets :
-- type : "query"|"director"|"actor"|"filter"
-- query_text : texte exact à chercher si type=query (ex: "Saga Alien", "Palme d'or Festival de Cannes", "Films français des années 80")
-- name : nom explicite de la personne (ex: "David Fincher", "Denis Villeneuve", "Quentin Tarantino")
-- label : titre direct et clair (ex: "David Fincher (Réalisateur)", "Saga James Bond 007", "Animation Japonaise des années 2000")
+- type : "director"|"actor"|"filter"
+- name : nom explicite de la personne (ex: "David Fincher")
+- label : titre direct et clair (ex: "David Fincher (Réalisateur)")
 - desc : description sobre en 5 mots max
 - genres : tableau parmi [action, aventure, animation, comédie, crime, documentaire, drame, famille, fantastique, histoire, horreur, musique, mystère, romance, science-fiction, thriller, guerre, western]
 - country : code pays ISO (FR, US, KR, JP, IT, GB, etc.)
@@ -729,12 +900,7 @@ Réponds UNIQUEMENT avec un JSON d'objets :
       card.innerHTML = `<b>${item.label}</b><span>${item.desc || ''}</span>`;
       card.onclick = () => {
         closeSidebar();
-        if (item.type === 'query' && item.query_text) {
-          $('#hint').value = item.query_text;
-          $('#ask').click();
-        } else {
-          selectFacet(item, card);
-        }
+        selectFacet(item, card);
       };
       container.appendChild(card);
     });
@@ -831,7 +997,6 @@ function renderListView() {
         <button class="btn-del" style="background:var(--bad);color:#fff">✕</button>
       `;
     } else {
-      // Non vus
       actionButtons = `
         <button class="btn-to-seen" style="background:#234458">→ Vu</button>
         <button class="btn-to-watch" style="background:#583a23">→ À voir</button>
@@ -952,7 +1117,6 @@ function renderGrid() {
   });
 }
 
-// Enregistre uniquement ce qui a été explicitement coché (ne marque JAMAIS en non vu)
 function recordSelectionOnly() {
   const now = Date.now();
   grid.forEach(f => {
@@ -967,7 +1131,6 @@ function recordSelectionOnly() {
   save();
 }
 
-// Validation explicite : les cochés sont vus / à voir, TOUT le reste est marqué NON VU
 function recordFullValidation() {
   const now = Date.now();
   grid.forEach(f => {
@@ -980,14 +1143,12 @@ function recordFullValidation() {
   save();
 }
 
-// Clic sur "Valider la sélection" : valide et enchaîne sur la suite
 $('#btn-validate').onclick = async () => {
   recordFullValidation();
   $('#perf').textContent = `✓ Grille validée avec succès.`;
   await fetchNextBatch();
 };
 
-// Clic sur "Passer" : enregistre uniquement ce que tu as coché, ne brûle rien d'autre
 $('#next').onclick = async () => {
   recordSelectionOnly();
   await fetchNextBatch();
@@ -1013,9 +1174,7 @@ const dl = (name, text, type) => {
 const exportCsvMap = (map, filename) => {
   const rows = Object.values(map).map(f => `${f.id},"${(f.o || f.t).replace(/"/g, '""')}",${f.y}`);
   if (!rows.length) return alert('Aucun film à exporter pour cette liste.');
-  dl(filename, 'tmdbID,Title,Year
-' + rows.join('
-'), 'text/csv');
+  dl(filename, 'tmdbID,Title,Year\n' + rows.join('\n'), 'text/csv');
 };
 
 $('#btn-export-csv').onclick = () => { recordSelectionOnly(); exportCsvMap(S.seen, 'letterboxd-vus.csv'); };
@@ -1032,6 +1191,53 @@ $('#btn-export-current-tab').onclick = () => {
 $('#btn-export-json').onclick = () => {
   recordSelectionOnly();
   dl('session-films.json', JSON.stringify(S), 'application/json');
+};
+
+// Import d'un CSV de liste Letterboxd pour l'explorer directement dans la grille
+$('#btn-import-lb-list').onclick = () => $('#lb-list-input').click();
+$('#lb-list-input').onchange = async e => {
+  const f = e.target.files[0];
+  if (!f || !hasKeys(false)) return;
+  const txt = await f.text();
+  closeKeyModal();
+  switchToExplore();
+  $('#msg').textContent = `🔍 Lecture du CSV Letterboxd (${f.name})...`;
+
+  const lines = txt.split(/\r?\n/);
+  const parsedItems = [];
+  // Format standard export liste Letterboxd: Position,Name,Year,URL,Description
+  for (let i = 1; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (!l) continue;
+    // Extraction CSV compatible guillemets
+    const cols = l.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
+    if (cols.length >= 2) {
+      let name = cols[1].replace(/^"|"$/g, '').replace(/""/g, '"');
+      let year = cols[2] ? cols[2].replace(/^"|"$/g, '') : '';
+      if (name && name !== 'Name') parsedItems.push({ t: name, y: year });
+    }
+  }
+
+  const resolved = [];
+  const seenIds = new Set();
+  for (let i = 0; i < parsedItems.length; i += 15) {
+    const chunk = parsedItems.slice(i, i + 15);
+    const batch = await Promise.all(chunk.map(m => resolveMovieOnTMDB(m.t, m.y)));
+    batch.forEach(m => {
+      if (m && !seenIds.has(m.id)) {
+        seenIds.add(m.id);
+        resolved.push(m);
+      }
+    });
+    $('#msg').textContent = `🔍 Résolution TMDB : ${Math.min(i + 15, parsedItems.length)}/${parsedItems.length}...`;
+  }
+
+  browseState = {
+    mode: 'buffer',
+    label: `Liste CSV : ${f.name} (${resolved.length} films)`,
+    buffer: resolved
+  };
+  fetchNextBatch();
 };
 
 $('#btn-import-file').onclick = () => $('#file-input').click();
@@ -1077,11 +1283,12 @@ $('#btn-reset-all').onclick = () => {
 
 // Init
 save();
-if (keys.a && keys.t) {
-  loadLLMSuggestions();
+renderLBPresets();
+if (keys.t) {
+  if (keys.a) loadLLMSuggestions();
   fetchNextBatch();
 } else {
-  $('#msg').textContent = 'Clique sur « ⚙️ » pour configurer tes clés API.';
+  $('#msg').textContent = 'Clique sur « ⚙️ » pour configurer ta clé API TMDB.';
 }
 </script>
 </body>
